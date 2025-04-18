@@ -1,226 +1,191 @@
 // index.js
 
-// P2P File Transfer with Local LAN Discovery & Robust Short IDs
-// NOTE: To enable peer discovery, your PeerServer must be started with `allow_discovery: true`.
+// P2P File Transfer with LAN WebSocket Discovery & Short IDs
+// Requires: a simple LAN WebSocket server relaying connected PeerJS IDs.
+// Example: Node ws server that tracks clients and broadcasts { type:'peers', peers: [id1,id2,...] }
 
-// Example Node server config:
-// const { PeerServer } = require('peer');
-// PeerServer({ port: 9000, path: '/peerjs', allow_discovery: true });
+(function() {
+    // === Configuration ===
+    const DISCOVERY_SERVER = 'ws://<LAN_SERVER_IP>:3000'; // e.g. ws://192.168.1.50:3000
+    const SHORT_LEN = 6;
 
-document.addEventListener('DOMContentLoaded', () => {
-    // --- Globals & DOM References ---
-    // If you host your own PeerServer, point Peer() to it here:
-    // const peer = new Peer(undefined, { host:'<your-server>', port:9000, path:'/peerjs', debug:2 });
-    const peer = new Peer(); // default PeerJS cloud (note: discovery disabled there)
+    // === DOM Elements ===
+    const fileInput        = document.getElementById('file-input');
+    const sendButton       = document.getElementById('send-button');
+    const fileList         = document.getElementById('file-list');
+    const status           = document.getElementById('status');
+    const peerList         = document.getElementById('peer-list');
+    const receivedFiles    = document.getElementById('received-files');
+    const connSection      = document.getElementById('connection-section');
 
-    const connections = {};
-    let shortToFull = {}; // map: shortID -> [fullPeerId,...]
-  
-    // DOM nodes
-    const fileInput     = document.getElementById('file-input');
-    const sendButton    = document.getElementById('send-button');
-    const fileList      = document.getElementById('file-list');
-    const status        = document.getElementById('status');
-    const peerList      = document.getElementById('peer-list');
-    const receivedFiles = document.getElementById('received-files');
-    const connSection   = document.getElementById('connection-section');
-
-    // Progress lists
-    const sendProgressList    = document.createElement('ul'); sendProgressList.id = 'send-progress-list';
+    // dynamic lists
+    const sendProgressList     = document.createElement('ul'); sendProgressList.id = 'send-progress-list';
     fileList.parentNode.insertBefore(sendProgressList, fileList.nextSibling);
-    const receiveProgressList = document.createElement('ul'); receiveProgressList.id = 'receive-progress-list';
+    const receiveProgressList  = document.createElement('ul'); receiveProgressList.id = 'receive-progress-list';
     receivedFiles.parentNode.insertBefore(receiveProgressList, receivedFiles);
+    const nearbyLabel    = document.createElement('h3'); nearbyLabel.textContent = 'Nearby Peers';
+    const nearbyList     = document.createElement('ul'); nearbyList.id = 'nearby-peers-list';
+    connSection.append(nearbyLabel, nearbyList);
   
-    // Nearby Peers UI
-    const nearbyLabel = document.createElement('h3'); nearbyLabel.textContent = 'Nearby Short IDs';
-    const nearbyList  = document.createElement('ul'); nearbyList.id = 'nearby-peers-list';
-    const refreshBtn  = document.createElement('button');
-    refreshBtn.textContent = 'Refresh Nearby';
-    refreshBtn.style.marginBottom = '10px';
-    connSection.append(nearbyLabel, refreshBtn, nearbyList);
+    const peerInput      = document.createElement('input'); peerInput.placeholder = 'Enter short ID…';
+    const peerBtn        = document.createElement('button'); peerBtn.textContent = 'Connect';
+    connSection.append(peerInput, peerBtn);
 
-    let selectedFiles = [];
-    const incomingBuffers = {};
-    const receiverProgress = {};
+    // === State ===
+    const connections    = {};            // fullID -> DataConnection
+    let selectedFiles    = [];
+    const shortToFull    = {};            // shortID -> [fullID,...]
+    const incomingBuffers= {};
+    const receiverProg   = {};            // key -> progress bar
 
-    // --- Utility: generate short ID (last 6 chars) ---
-    const makeShort = id => id.slice(-6);
+    // === Utilities ===
+    const makeShort = id => id.slice(-SHORT_LEN);
+    const keyFor = (peerId, fileName) => peerId + ':' + fileName;
 
-    // --- Peer Initialization ---
+    // === PeerJS Setup ===
+    const peer = new Peer(); // default cloud; replace constructor args to point to your own server
     peer.on('open', id => {
       const short = makeShort(id);
-      status.innerHTML = `Your Short ID: <code>${short}</code> <button id="copy-short">Copy Short ID</button> <em>(LAN discovery may be limited)</em>`;
-      document.getElementById('copy-short').onclick = () => navigator.clipboard.writeText(short).then(() => status.innerHTML += ' 👍');
+      status.innerHTML = `Your Short ID: <code>${short}</code> <button id="copy-short">Copy</button>`;
+      document.getElementById('copy-short').onclick = () => navigator.clipboard.writeText(short);
+      // after open, announce via WS
+      if (discSocket.readyState === WebSocket.OPEN) {
+        discSocket.send(JSON.stringify({ type:'announce', id }));
+      }
     });
     peer.on('connection', conn => setupConnection(conn));
-    peer.on('error', err => console.error('Peer error:', err));
+    peer.on('error', err => console.error('PeerJS', err));
   
-    // --- Manual Nearby Refresh ---
-    refreshBtn.onclick = discoverPeers;
+    // === Discovery WebSocket ===
+    const discSocket = new WebSocket(DISCOVERY_SERVER);
+    discSocket.onopen = () => console.log('Discovery WS connected');
+    discSocket.onmessage = ({ data }) => {
+      try {
+        const msg = JSON.parse(data);
+        if (msg.type === 'peers') showNearby(msg.peers);
+      } catch(e) {
+        console.warn('Bad discovery message', e);
+      }
+    };
+    discSocket.onerror = e => console.error('Discovery WS error', e);
 
-    function discoverPeers() {
-      if (!peer.listAllPeers) {
-        alert('Discovery not supported by this server.');
+    function showNearby(peerIds) {
+      nearbyList.innerHTML = '';
+      shortToFull = {};
+      peerIds
+        .filter(id => id !== peer.id && !connections[id])
+        .forEach(id => {
+          const short = makeShort(id);
+          (shortToFull[short] = shortToFull[short]||[]).push(id);
+        });
+      if (Object.keys(shortToFull).length === 0) {
+        nearbyList.innerHTML = '<li>No peers found</li>';
         return;
       }
-      peer.listAllPeers()
-        .then(peers => {
-          shortToFull = {};
-          nearbyList.innerHTML = '';
-          peers.filter(p => p !== peer.id && !connections[p])
-               .forEach(remoteId => {
-                 const shortId = makeShort(remoteId);
-                 (shortToFull[shortId] = shortToFull[shortId] || []).push(remoteId);
-                 const li = document.createElement('li');
-                 const btn= document.createElement('button');
-                 btn.textContent = shortId;
-                 btn.title = remoteId; // show full ID on hover
-                 btn.onclick = () => dialPeer(shortId);
-                 li.append(btn);
-                 nearbyList.append(li);
-               });
-          if (nearbyList.children.length === 0) {
-            nearbyList.innerHTML = '<li>No peers found. Make sure your PeerServer supports discovery and peers are online.</li>';
-          }
-        })
-        .catch(err => {
-          console.warn('Discovery error:', err);
-          alert('Error discovering peers. Check server allow_discovery setting.');
-        });
+      Object.keys(shortToFull).forEach(short => {
+        const li = document.createElement('li');
+        const btn= document.createElement('button');
+        btn.textContent = short;
+        btn.title = shortToFull[short].join(', ');
+        btn.onclick = () => dial(short);
+        li.append(btn);
+        nearbyList.append(li);
+      });
     }
-
-    // --- Dial-in UI (short IDs) ---
-    const input  = document.createElement('input');
-    const button = document.createElement('button');
-    input.placeholder = 'Enter short ID…';
-    input.style.margin = '10px 8px 10px 0';
-    button.textContent = 'Connect';
-    connSection.append(input, button);
-    button.onclick = () => dialPeer(input.value.trim());
   
-    function dialPeer(shortId) {
-      if (!shortId) return alert('Enter a short ID.');
-      const candidates = shortToFull[shortId];
-      if (!candidates || !candidates.length) return alert('Short ID not found. Try refresh.');
-      let full;
-      if (candidates.length === 1) {
-        full = candidates[0];
-      } else {
-        const choice = prompt(
-          `Multiple peers match short ID '${shortId}':\n` +
-          candidates.map((c,i) => `${i+1}: ${c}`).join('\n') +
-          '\nEnter number to connect:'
-        );
-        const idx = parseInt(choice) - 1;
-        if (!candidates[idx]) return alert('Invalid selection.');
-        full = candidates[idx];
+    // === Dial by Short ID ===
+    peerBtn.onclick = () => dial(peerInput.value.trim());
+    function dial(short) {
+      if (!shortToFull[short]) return alert('No such peer');
+      const arr = shortToFull[short];
+      let full = arr[0];
+      if (arr.length > 1) {
+        const choice = prompt(`Multiple peers match ${short}:\n` + arr.map((id,i)=>`${i+1}: ${id}`).join('\n'));
+        full = arr[parseInt(choice)-1];
       }
-      if (connections[full]) return alert('Already connected.');
-      setupConnection(peer.connect(full, { reliable: true }));
+      if (!full) return;
+      setupConnection(peer.connect(full, { reliable:true }));
     }
 
-    // --- Connection Handler & Peer List ---
+    // === Connection Handler ===
     function setupConnection(conn) {
       conn.on('open', () => {
         connections[conn.peer] = conn;
-        updatePeerList();
+        updatePeerUI();
         conn.on('data', data => handleData(data, conn));
+        // announce this new connection to disco
+        if (discSocket.readyState === WebSocket.OPEN) discSocket.send(JSON.stringify({ type:'announce', id: peer.id }));
       });
-      conn.on('close', () => {
-        delete connections[conn.peer];
-        updatePeerList();
-      });
+      conn.on('close', () => { delete connections[conn.peer]; updatePeerUI(); });
     }
-
-    function updatePeerList() {
+    function updatePeerUI() {
       peerList.innerHTML = '';
-      const ids = Object.keys(connections);
-      if (!ids.length) {
-        status.textContent = 'Not connected';
-        return;
-      }
-      status.textContent = 'Connected: ' + ids.map(makeShort).join(', ');
-      ids.forEach(full => {
-        const li = document.createElement('li');
-        li.textContent = makeShort(full);
-        li.title = full;
-        peerList.append(li);
+      const keys = Object.keys(connections);
+      status.textContent = keys.length ? 'Connected: ' + keys.map(makeShort).join(', ') : 'Not connected';
+      keys.forEach(full => {
+        const li = document.createElement('li'); li.textContent = makeShort(full);
+        li.title = full; peerList.append(li);
       });
     }
   
-    // --- File Selection UI ---
+    // === File Selection ===
     fileInput.onchange = e => {
       selectedFiles = Array.from(e.target.files);
       fileList.innerHTML = '';
       sendProgressList.innerHTML = '';
-      selectedFiles.forEach(f => {
-        const li = document.createElement('li');
-        li.textContent = f.name;
-        fileList.append(li);
-      });
+      selectedFiles.forEach(f=>{const li=document.createElement('li');li.textContent=f.name;fileList.append(li)});
     };
   
-    // --- Send Files: Chunks + Progress ---
+    // === Send Files ===
     sendButton.onclick = () => {
-      if (!selectedFiles.length) return alert('No files chosen.');
+      if (!selectedFiles.length) return alert('Select files');
       const peers = Object.values(connections);
-      if (!peers.length) return alert('No peers connected.');
-
+      if (!peers.length) return alert('No peers');
       selectedFiles.forEach(file => {
-        // broadcast metadata
         peers.forEach(c => c.send({ type:'metadata', fileName:file.name, fileSize:file.size }));
-        // sender UI
         const li = document.createElement('li');
         const txt= document.createTextNode(`Sending ${file.name}: `);
         const bar= document.createElement('progress'); bar.max=file.size; bar.value=0;
-        li.append(txt, bar);
-        sendProgressList.append(li);
-        // chunk send
-        const size= file.size, chunk=64*1024;
-        peers.forEach(c => {
-          let offset=0;
-          const sendChunk = () => {
-            const slice=file.slice(offset, offset+chunk);
-            const reader=new FileReader();
+        li.append(txt,bar); sendProgressList.append(li);
+        const chunkSize=64*1024; let off;
+        peers.forEach(c=>{
+          off=0; (function sendChunk(){
+            const slice = file.slice(off, off+chunkSize);
+            const reader = new FileReader();
             reader.onload = evt => {
-              c.send({ type:'chunk', fileName:file.name, chunk:evt.target.result, isLast: offset+chunk>=size });
-              offset+=chunk; bar.value=offset;
-              if(offset<size) sendChunk();
+              c.send({ type:'chunk', fileName:file.name, chunk:evt.target.result, isLast:off+chunkSize>=file.size });
+              off+=chunkSize; bar.value=off;
+              if(off<file.size) sendChunk();
             };
             reader.readAsArrayBuffer(slice);
-          };
-          sendChunk();
+          })();
         });
       });
     };
   
-    // --- Receive & Assemble with Progress ---
+    // === Receive Files ===
     function handleData(data, conn) {
-      const key = conn.peer + ':' + data.fileName;
+      const key = keyFor(conn.peer, data.fileName);
       if (data.type==='metadata') {
         incomingBuffers[key]=[];
         const li = document.createElement('li');
         const txt= document.createTextNode(`Receiving ${data.fileName} from ${makeShort(conn.peer)}: `);
         const bar= document.createElement('progress'); bar.max=data.fileSize; bar.value=0;
-        li.append(txt, bar);
-        receiveProgressList.append(li);
-        receiverProgress[key]={ bar };
-        return;
+        li.append(txt,bar); receiveProgressList.append(li);
+        receiverProg[key]={bar};
       }
       if (data.type==='chunk') {
         incomingBuffers[key].push(data.chunk);
-        const { bar } = receiverProgress[key]||{};
-        if(bar) bar.value += data.chunk.byteLength;
-        if(data.isLast) {
-          const blob=new Blob(incomingBuffers[key]);
-          const url=URL.createObjectURL(blob);
-          const li=document.createElement('li');
-          const a =document.createElement('a');
-          a.href=url; a.download=data.fileName; a.textContent=data.fileName;
-          li.append(a, document.createTextNode(` (from ${makeShort(conn.peer)})`));
-          receivedFiles.append(li);
-          delete incomingBuffers[key]; delete receiverProgress[key];
+        const { bar }= receiverProg[key]||{};
+        if(bar) bar.value+= data.chunk.byteLength;
+        if (data.isLast) {
+          const blob = new Blob(incomingBuffers[key]);
+          const url  = URL.createObjectURL(blob);
+          const li   = document.createElement('li');
+          const a    = document.createElement('a'); a.href=url; a.download=data.fileName; a.textContent=data.fileName;
+          li.append(a, document.createTextNode(` (from ${makeShort(conn.peer)})`)); receivedFiles.append(li);
+          delete incomingBuffers[key]; delete receiverProg[key];
         }
       }
     }
-  });
+  })();
