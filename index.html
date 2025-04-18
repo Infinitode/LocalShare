@@ -4,32 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LocalShare - P2P File Sharing</title>
-    <!-- Link to your CSS file (optional, for styling) -->
     <link rel="stylesheet" href="index.css">
-    <style>
-        /* Basic inline styles for layout - move to style.css for better organization */
-        body { font-family: sans-serif; margin: 20px; }
-        .container { max-width: 800px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
-        .section { margin-bottom: 20px; padding: 15px; border: 1px dashed #eee; border-radius: 4px; }
-        h2 { margin-top: 0; }
-        #file-list li, #received-files li { margin-bottom: 5px; }
-        button { padding: 8px 15px; cursor: pointer; }
-        input[type="file"] { margin-bottom: 10px; }
-        #status { font-style: italic; color: #555; }
-    </style>
 </head>
 <body>
 
     <div class="container">
         <h1>LocalShare</h1>
         <p>Share files directly with others on your local network.</p>
-
+        <br>
         <!-- Section for Selecting and Sending Files -->
         <div class="section" id="send-section">
             <h2>Send Files</h2>
             <input type="file" id="file-input" multiple>
+            <label for="file-input" class="file-label">Choose Files</label>
             <button id="send-button">Send Selected Files</button>
-            <h3>Selected Files:</h3>
+            <br>
             <ul id="file-list">
                 <!-- Selected files will be listed here by JavaScript -->
             </ul>
@@ -49,6 +38,7 @@
         <div class="section" id="receive-section">
             <h2>Received Files</h2>
             <ul id="received-files">
+                <li>No received files...</li>
                 <!-- Links to downloaded/received files will appear here -->
                 <!-- Example: <li><a href="#" download="filename.txt">filename.txt</a> (Received from PeerX)</li> -->
             </ul>

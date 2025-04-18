@@ -1,0 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Reddit+Sans:ital,wght@0,200..900;1,200..900&display=swap');
+
+:root{
+    --primary-color: #2f4dd3;
+    --bg1: #ffffff;
+    --bg2: #e0e0e0;
+    --text-color: #333;
+    --border-radius: 10px;
+    --p1: 1em;
+}
+*{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    font-family: inherit;
+}
+html,body{
+    background-color: var(--bg1);
+    color: var(--text-color);
+    padding: var(--p1);
+    font-family: 'Reddit Sans', sans-serif;
+}
+button{
+    padding: var(--p1);
+    cursor: pointer;
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    border-radius: var(--border-radius);
+    font-size: medium;
+    transition: background-color 0.3s ease;
+}
+input{
+    padding: var(--p1);
+    margin-bottom: var(--p1);
+    border: 1px solid #ccc;
+    border-radius: var(--border-radius);
+    font-size: medium;
+    width: 100%;
+}
+input[type="file"]{
+    display: none;
+}
+.file-label{
+    display: inline-block;
+    padding: var(--p1);
+    background-color: var(--primary-color);
+    color: #fff;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+.container{
+    max-width: 800px;
+    margin: auto;
+    padding: var(--p1);
+    border: 1px solid #ccc;
+    border-radius: var(--border-radius);
+}
+.section{
+    margin-bottom: var(--p1);
+    padding: var(--p1);
+    border: 1px dashed #ccc;
+    border-radius: var(--border-radius);
+}
+#file-list li, #received-files li{
+    margin-bottom: var(--p1);
+    padding: var(--p1);
+    border-radius: var(--border-radius);
+}
+#status{
+    font-style: italic;
+    color: #555;
+    margin-bottom: var(--p1);
+    code{
+        background-color: var(--bg2);
+        padding: 5px 10px;
+        border-radius: var(--border-radius);
+        margin-right: var(--p1);
+    }
+}
