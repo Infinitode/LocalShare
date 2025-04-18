@@ -2,7 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Globals & DOM References ---
-    const peer = new Peer();            // PeerJS instance
+    const peer = new Peer();
     const connections = {};
     const fileInput = document.getElementById('file-input');
     const sendButton = document.getElementById('send-button');
@@ -16,32 +16,19 @@ document.addEventListener('DOMContentLoaded', () => {
     sendProgressList.id = 'send-progress-list';
     fileList.parentNode.insertBefore(sendProgressList, fileList.nextSibling);
 
-    const receiveProgressList = document.createElement('ul');
-    receiveProgressList.id = 'receive-progress-list';
-    receivedFiles.parentNode.insertBefore(receiveProgressList, receivedFiles);
-
-    const incomingBuffers = {};   // { key: [ArrayBuffer,...] }
-    const receiverProgress = {};  // { key: { bar: HTMLProgressElement, total: number } }
+    // Buffer storage for incoming chunks
+    const incomingBuffers = {};  // { "peerId:fileName": [ArrayBuffer, ...] }
 
     // --- Peer Setup ---
     peer.on('open', id => {
-      status.innerHTML = `Your ID: <code>${id}</code> <button id="copy-id">Copy ID</button> <em>(auto-discovery ON)</em>`;
-      document.getElementById('copy-id').addEventListener('click', () => navigator.clipboard.writeText(id).then(() => status.innerHTML += ' 👍'));
-
-      // Start auto-discovery every 10s
-      setInterval(() => {
-        if (peer.listAllPeers) {
-          peer.listAllPeers(peers => {
-            peers.forEach(remoteId => {
-              if (remoteId === peer.id || connections[remoteId]) return;
-              const conn = peer.connect(remoteId, { reliable: true });
-              setupConnection(conn);
-            });
-          });
-        }
-      }, 10000);
+      status.innerHTML = `Your ID: <code>${id}</code> <button id="copy-id">Copy ID</button>`;
+      document.getElementById('copy-id').addEventListener('click', () => {
+        navigator.clipboard.writeText(id).then(() => {
+          status.innerHTML += ' 👍';
+        });
+      });
     });
-    peer.on('error', err => console.error('Peer error:', err));
+
     peer.on('connection', conn => setupConnection(conn));
   
     // --- Dial-in UI ---
@@ -57,7 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const remoteId = connectInput.value.trim();
       if (!remoteId) return alert('Please enter a peer ID.');
       if (connections[remoteId]) return alert('Already connected to ' + remoteId);
-      setupConnection(peer.connect(remoteId, { reliable: true }));
+      const conn = peer.connect(remoteId, { reliable: true });
+      setupConnection(conn);
     });
   
     // --- Connection Handler ---
@@ -98,19 +86,14 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   
-    // --- Send Files with Large-file Support ---
+    // --- Send Files with Progress ---
     sendButton.addEventListener('click', () => {
       if (!selectedFiles.length) return alert('No files selected.');
       const peers = Object.values(connections);
       if (!peers.length) return alert('No peers connected.');
 
       selectedFiles.forEach(file => {
-        const keyBase = file.name;
-        const chunkSize = 64 * 1024; // 64KB
-        // Broadcast metadata first
-        peers.forEach(conn => conn.send({ type: 'metadata', fileName: file.name, fileSize: file.size }));
-
-        // UI: send progress
+        // UI: create progress element
         const li = document.createElement('li');
         const label = document.createTextNode(`Sending ${file.name}: `);
         const progress = document.createElement('progress');
@@ -119,13 +102,21 @@ document.addEventListener('DOMContentLoaded', () => {
         li.append(label, progress);
         sendProgressList.appendChild(li);
 
+        // Send in 64KB chunks
+        const chunkSize = 64 * 1024;
+        const totalChunks = Math.ceil(file.size / chunkSize);
+
         peers.forEach(conn => {
           let offset = 0;
           function readSlice() {
             const slice = file.slice(offset, offset + chunkSize);
             const reader = new FileReader();
             reader.onload = evt => {
-              conn.send({ type: 'chunk', fileName: file.name, chunk: evt.target.result, isLast: offset + chunkSize >= file.size });
+              conn.send({
+                fileName: file.name,
+                chunk: evt.target.result,
+                isLast: offset + chunkSize >= file.size
+              });
               offset += chunkSize;
               progress.value = offset;
               if (offset < file.size) readSlice();
@@ -137,33 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   
-    // --- Receiving & Tracking Progress ---
+    // --- Receive & Reassemble ---
     function handleData(data, conn) {
-      const key = conn.peer + ':' + data.fileName;
-      // Metadata packet
-      if (data.type === 'metadata') {
-        incomingBuffers[key] = [];
-        // Setup receive UI
-        const li = document.createElement('li');
-        const label = document.createTextNode(`Receiving ${data.fileName} from ${conn.peer}: `);
-        const progress = document.createElement('progress');
-        progress.max = data.fileSize;
-        progress.value = 0;
-        progress.id = `${key}-progress`;
-        li.append(label, progress);
-        receiveProgressList.appendChild(li);
-        receiverProgress[key] = { bar: progress, total: data.fileSize };
-        return;
-      }
-      // Chunk data
-      if (data.type === 'chunk') {
+      if (data.fileName && data.chunk) {
+        const key = conn.peer + ':' + data.fileName;
+        if (!incomingBuffers[key]) incomingBuffers[key] = [];
         incomingBuffers[key].push(data.chunk);
-        // Update progress bar
-        const { bar } = receiverProgress[key] || {};
-        if (bar) bar.value += data.chunk.byteLength;
-
         if (data.isLast) {
-          // Assemble blob
           const blob = new Blob(incomingBuffers[key]);
           const url = URL.createObjectURL(blob);
           const li = document.createElement('li');
@@ -173,9 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
           a.textContent = data.fileName;
           li.append(a, document.createTextNode(` (from ${conn.peer})`));
           receivedFiles.appendChild(li);
-          // Clean up
           delete incomingBuffers[key];
-          delete receiverProgress[key];
         }
       }
     }
