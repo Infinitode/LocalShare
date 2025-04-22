@@ -151,7 +151,6 @@ ul{
     li{
         display: flex;
         align-items: center;
-        padding: 0 var(--p2);
         line-height: 1em;
         margin-bottom: var(--p1);
         font-size: small;
