@@ -737,11 +737,32 @@ const nouns = [
 
 
     peer.on('connection', conn => {
-        // Metadata should contain the remote peer's name
+        // Metadata should contain the remote peer's name (sent by the connector)
         const remotePeerName = conn.metadata?.name || `Peer_${conn.peer.substring(0, 4)}`;
         console.log(`Incoming connection from ${remotePeerName} (${conn.peer}) with metadata:`, conn.metadata);
         console.log(`Accepting data connection from ${remotePeerName} (${conn.peer})`);
-        setupConnection(conn, remotePeerName); // Pass the name
+
+        // Setup the connection as usual (stores the initial name from metadata)
+        setupConnection(conn, remotePeerName);
+
+        // --- Add this part ---
+        // When the connection *opens* from our side (the receiver),
+        // send our name back to the original connector.
+        conn.on('open', () => {
+            // Ensure the connection still exists in our map before sending
+            if (connections[conn.peer]) {
+                console.log(`Connection with ${connections[conn.peer].name} (${conn.peer}) opened. Sending our name: ${localPeerName}`);
+                try {
+                    // Send a specific message type with our name
+                    conn.send({ type: 'peer-name', name: localPeerName });
+                } catch (error) {
+                    console.error(`Failed to send name to ${connections[conn.peer].name} (${conn.peer}):`, error);
+                }
+            } else {
+                 console.warn(`Connection ${conn.peer} opened, but not found in connections map. Cannot send name back.`);
+            }
+        });
+        // --- End of added part ---
     });
 
     // --- Dial-in UI (Manual Connection) ---
@@ -1117,25 +1138,45 @@ const nouns = [
     }
 
 
-    // --- Receive & Reassemble File Chunks ---
+        // --- Receive & Reassemble File Chunks ---
     function handleData(data, conn) {
         const peerId = conn.peer;
-        // Get peer name from our stored connections data
-        const peerName = connections[peerId]?.name || `Peer_${peerId.substring(0, 4)}`; // Fallback name
+        // Get peer name from our stored connections data (might be temporary initially)
+        const currentPeerName = connections[peerId]?.name || `Peer_${peerId.substring(0, 4)}`; // Fallback name
 
         // Use peerId in the key for uniqueness, but store peerName for UI
-        const key = `${peerId}:${data.fileName}`;
+        const key = `${peerId}:${data.fileName}`; // Primarily for file transfers
         // Sanitize key based on peerId and filename for use as a DOM ID
         const safeFileName = data.fileName?.replace(/[^a-zA-Z0-9_-]/g, '-') || 'unknownfile';
-        const sanitizedKey = `receive-${peerId}-${safeFileName}`;
+        const sanitizedKey = `receive-${peerId}-${safeFileName}`; // Primarily for file transfers
 
-        // --- Handle Metadata Message ---
-        if (data.type === 'file-metadata' && data.fileName && data.totalSize !== undefined) {
-            console.log(`Received metadata for ${data.fileName} (${formatBytes(data.totalSize)}) from ${peerName} (${peerId})`);
+        // --- Handle Peer Name Message --- <<< ADD THIS BLOCK
+        if (data.type === 'peer-name' && typeof data.name === 'string') {
+            console.log(`Received name update from ${peerId}: ${data.name}`);
+            if (connections[peerId]) {
+                // Update the stored name only if it's different
+                if (connections[peerId].name !== data.name) {
+                     console.log(`Updating name for ${peerId} from '${connections[peerId].name}' to '${data.name}'`);
+                     connections[peerId].name = data.name;
+                     updatePeerList(); // Update the UI to show the correct name
+                } else {
+                    console.log(`Name for ${peerId} is already '${data.name}'. No update needed.`);
+                }
+            } else {
+                // This might happen if the connection closed before the name message was processed
+                console.warn(`Received name '${data.name}' from ${peerId}, but no active connection found in map.`);
+            }
+            // This message type doesn't need further processing below
+            return;
+
+        // --- Handle Metadata Message --- (Keep existing logic)
+        } else if (data.type === 'file-metadata' && data.fileName && data.totalSize !== undefined) {
+            // Use currentPeerName for logging/UI setup
+            console.log(`Received metadata for ${data.fileName} (${formatBytes(data.totalSize)}) from ${currentPeerName} (${peerId})`);
 
             // Check if transfer already exists (e.g., duplicate metadata message)
             if (incomingTransfers[key]) {
-                console.warn(`Received duplicate metadata for ongoing transfer: ${key} from ${peerName}. Ignoring.`);
+                console.warn(`Received duplicate metadata for ongoing transfer: ${key} from ${currentPeerName}. Ignoring.`);
                 return;
             }
              // Check if a previous transfer failed and element still exists
@@ -1145,35 +1186,36 @@ const nouns = [
                  existingLi.remove();
              }
 
-            // Create progress UI element using the PEER NAME
+            // Create progress UI element using the PEER NAME known *at this moment*
             const li = document.createElement('li');
             li.id = sanitizedKey; // Use sanitized ID
-            const label = document.createTextNode(`Receiving ${data.fileName} from ${peerName}: `);
+            const label = document.createTextNode(`Receiving ${data.fileName} from ${currentPeerName}: `); // Use current name
             const progress = document.createElement('progress');
             progress.max = data.totalSize;
             progress.value = 0;
             li.append(label, progress);
             receivedFiles.appendChild(li); // Add to the received files list
 
-            // Initialize transfer state in memory, include peerName
+            // Initialize transfer state in memory, include peerName known *now*
             incomingTransfers[key] = {
                 buffer: [],
                 receivedBytes: 0,
                 totalSize: data.totalSize,
                 progressElement: li, // Store reference to the UI element
-                peerName: peerName   // Store name for potential error messages later
+                peerName: currentPeerName   // Store name for potential error messages later
             };
 
-        // --- Handle File Chunk Message ---
+        // --- Handle File Chunk Message --- (Keep existing logic)
         } else if (data.type === 'file-chunk' && data.fileName && data.chunk) {
             const transfer = incomingTransfers[key];
 
             // Check if metadata was received first
             if (!transfer) {
-                console.error(`Received file chunk for ${data.fileName} from ${peerName} (${peerId}) before metadata. Discarding chunk.`);
+                // Use currentPeerName for error message
+                console.error(`Received file chunk for ${data.fileName} from ${currentPeerName} (${peerId}) before metadata. Discarding chunk.`);
                  const existingLi = document.getElementById(sanitizedKey);
                  if (existingLi && !existingLi.querySelector('a')) { // If it's still showing progress/error
-                     existingLi.textContent = `Error receiving ${data.fileName} from ${peerName} (Missing Metadata)`;
+                     existingLi.textContent = `Error receiving ${data.fileName} from ${currentPeerName} (Missing Metadata)`;
                      existingLi.style.color = 'red';
                  }
                 return; // Cannot process chunk without knowing total size etc.
@@ -1195,8 +1237,8 @@ const nouns = [
 
             // --- Last Chunk / Completion Check ---
             if (data.isLast) {
-                // Use the stored peerName from the transfer object
-                const finalPeerName = transfer.peerName || peerName;
+                // Use the stored peerName from the transfer object (captured when metadata arrived)
+                const finalPeerName = transfer.peerName || currentPeerName; // Fallback to current name
                 if (transfer.receivedBytes === transfer.totalSize) {
                     // Successfully received all bytes
                     const fileType = 'application/octet-stream'; // Default type
@@ -1217,15 +1259,17 @@ const nouns = [
                     // Error: Received 'last chunk' flag but byte count doesn't match
                     console.error(`File transfer incomplete for ${data.fileName} from ${finalPeerName} (${peerId}). Expected ${transfer.totalSize} bytes, received ${transfer.receivedBytes}`);
                     transfer.progressElement.textContent = `Error receiving ${data.fileName} from ${finalPeerName} (Incomplete)`;
+                    transfer.progressElement.style.color = 'red'; // Make error more visible
                 }
                 // Clean up transfer state from memory
                 delete incomingTransfers[key];
             }
         } else {
             // Handle other data types if needed
-            console.log(`Received unknown data type from ${peerName} (${peerId}):`, data);
+            console.log(`Received unknown/unhandled data type from ${currentPeerName} (${peerId}):`, data);
         }
     }
+
 
     // --- Cleanup for Incomplete Transfers on Disconnect/Error ---
     // Added peerName parameter
