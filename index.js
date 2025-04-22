@@ -1,3 +1,578 @@
+// // index.js
+
+// document.addEventListener('DOMContentLoaded', () => {
+//     const popup = document.getElementById('popup');
+//     let popupTimeoutId = null; // Variable to store the timeout ID
+
+//     function displayPopup(content){
+//         // 1. Clear any existing timeout
+//         if (popupTimeoutId) {
+//             clearTimeout(popupTimeoutId);
+//             popupTimeoutId = null; // Reset the ID
+//         }
+
+//         // 2. Update content and show the popup
+//         popup.innerHTML = content;
+//         popup.classList.add('show');
+
+//         // 3. Set a new timeout to hide the popup
+//         popupTimeoutId = setTimeout(() => {
+//             popup.classList.remove('show');
+//             // Optional: Clear content after hiding animation completes
+//             // You might want a slight delay if you have CSS transitions
+//             setTimeout(() => {
+//                 if (!popup.classList.contains('show')) { // Check if it wasn't shown again quickly
+//                    popup.innerHTML = '';
+//                 }
+//             }, 500); // Adjust delay based on your CSS transition duration (if any)
+//             popupTimeoutId = null; // Reset the ID after the timeout runs
+//         }, 3000); // Hide after 3 seconds from the *last* call
+//     }
+
+//     // --- Constants ---
+//     // DISCOVERY_ID removed
+
+//     // --- Globals & DOM References ---
+//     const peer = new Peer(); // Always let PeerJS generate the ID
+//     const connections = {}; // { peerId: DataConnection } - For DATA connections
+//     const fileInput = document.getElementById('file-input');
+//     const sendButton = document.getElementById('send-button');
+//     const fileList = document.getElementById('file-list');
+//     const status = document.getElementById('status');
+//     const peerList = document.getElementById('peer-list');
+//     const receivedFiles = document.getElementById('received-files'); // Holds progress bars too
+//     const qrCodeCanvas = document.getElementById('peer-id-qr-code'); // Get canvas for QR code
+//     const qrCodeContainer = document.getElementById('qr-code-container'); // Get container
+
+//     let selectedFiles = [];
+//     const sendProgressList = document.createElement('ul');
+//     sendProgressList.id = 'send-progress-list';
+//     fileList.parentNode.insertBefore(sendProgressList, fileList.nextSibling);
+
+//     // Buffer and progress tracking for incoming files
+//     // Structure: { "peerId:fileName": { buffer: [...], receivedBytes: 0, totalSize: 0, progressElement: Element } }
+//     const incomingTransfers = {};
+
+//     // --- Peer Setup ---
+//     peer.on('open', id => {
+//         console.log(`PeerJS initialized. Your ID: ${id}`);
+//         status.innerHTML = `Your ID: <code>${id}</code><button id="copy-id"><i class='bi bi-copy'></i> Copy ID</button>`;
+//         document.getElementById('copy-id')?.addEventListener('click', () => copyPeerId(id));
+//         displayQrCode(id);
+//         updatePeerList();
+//     });
+
+//     peer.on('error', err => {
+//         console.error("PeerJS error:", err);
+//         let alertMsg = `An error occurred with PeerJS: ${err.type}`;
+
+//         // Simplified error handling without hub specifics
+//         if (err.type === 'peer-unavailable') {
+//             const attemptedPeer = err.message.match(/Could not connect to peer (.*?)$/);
+//             alertMsg = `Could not connect to peer ${attemptedPeer ? attemptedPeer[1] : ''}. Peer ID might be incorrect or the peer is offline.`;
+//         } else if (err.type === 'network') {
+//             alertMsg = `Network error. Please check your connection.`;
+//         } else if (err.type === 'unavailable-id') {
+//             alertMsg = `The generated Peer ID (${peer.id}) is already taken. Please refresh the page to get a new ID.`;
+//         } else if (err.type === 'disconnected') {
+//             alertMsg = `Disconnected from the PeerJS signaling server. Please refresh.`;
+//         } else if (err.type === 'server-error') {
+//             alertMsg = `Error connecting to the PeerJS signaling server.`;
+//         }
+
+//         if (alertMsg) displayPopup("<i class='bi bi-info-circle-fill'></i>" + alertMsg);
+
+//         // Reset manual connection UI elements
+//         const connectInput = document.getElementById('peer-id-input');
+//         const connectButton = document.getElementById('connect-button');
+//         if (connectInput) connectInput.value = '';
+//         if (connectButton && connectButton.textContent === 'Connecting...') {
+//             connectButton.disabled = false;
+//             connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
+//         }
+//         updatePeerList();
+//     });
+
+
+//     peer.on('connection', conn => {
+//         console.log(`Incoming connection from ${conn.peer} with metadata:`, conn.metadata);
+//         console.log(`Accepting data connection from peer ${conn.peer}`);
+//         setupConnection(conn);
+//     });
+
+//     // --- Dial-in UI (Manual Connection) ---
+//     const connectInput = document.createElement('input');
+//     const connectButton = document.createElement('button');
+//     connectInput.id = 'peer-id-input';
+//     connectInput.placeholder = 'Enter peer ID manually…';
+//     connectInput.style.marginRight = '8px';
+//     connectButton.id = 'connect-button';
+//     connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
+//     document.getElementById('connection-section').append(connectInput, connectButton);
+
+//     connectButton.addEventListener('click', () => {
+//         const remoteId = connectInput.value.trim();
+//         if (!remoteId) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Please enter a peer ID.');
+//         if (connections[remoteId]) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Already connected to ' + remoteId);
+//         if (remoteId === peer.id) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + "You cannot connect to yourself.");
+
+//         console.log(`Attempting to connect manually to ${remoteId}...`);
+//         connectButton.disabled = true;
+//         connectButton.textContent = 'Connecting...';
+
+//         const conn = peer.connect(remoteId, { reliable: true });
+
+//         conn.on('error', (err) => {
+//             console.error(`Manual connection error with ${remoteId}:`, err);
+//             displayPopup("<i class='bi bi-info-circle-fill'></i>" + `Failed to connect to ${remoteId}. Error: ${err.type}`);
+//             if (connectInput.value === remoteId || connectButton.textContent === 'Connecting...') {
+//                  connectButton.disabled = false;
+//                  connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
+//             }
+//         });
+//         setupConnection(conn);
+//     });
+
+//     // --- Connection Handler (for DATA connections ONLY) ---
+//     function setupConnection(conn) {
+//         const remotePeerId = conn.peer;
+
+//         if (connections[remotePeerId]) {
+//             console.log(`Already have an active data connection to ${remotePeerId}. Ignoring duplicate setup request.`);
+//             if (connections[remotePeerId] !== conn) {
+//                  conn.close();
+//             }
+//             return;
+//         }
+
+//         console.log(`Setting up data connection with ${remotePeerId}`);
+//         connections[remotePeerId] = conn;
+//         updatePeerList();
+
+//         conn.on('open', () => {
+//             console.log(`Data connection established with ${remotePeerId}`);
+//             const connectButton = document.getElementById('connect-button');
+//             const connectInput = document.getElementById('peer-id-input');
+//             if (connectButton && connectInput.value === remotePeerId) {
+//                  connectButton.disabled = false;
+//                  connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
+//                  connectInput.value = '';
+//             }
+//         });
+
+//         conn.on('data', data => handleData(data, conn));
+
+//         conn.on('close', () => {
+//             console.log(`Data connection closed with ${remotePeerId}`);
+//             if (connections[remotePeerId]) {
+//                 delete connections[remotePeerId];
+//                 updatePeerList();
+//                 cleanupIncompleteTransfers(remotePeerId);
+//             }
+//         });
+
+//         conn.on('error', (err) => {
+//              console.error(`Error on data connection with ${remotePeerId}:`, err);
+//              if (connections[remotePeerId]) {
+//                  delete connections[remotePeerId];
+//                  updatePeerList();
+//                  cleanupIncompleteTransfers(remotePeerId);
+//              }
+//         });
+//     }
+
+//     // --- UI Updates & Utilities ---
+
+//     function copyPeerId(id) {
+//         if (!id) return;
+//         navigator.clipboard.writeText(id).then(() => {
+//             const copyButton = document.getElementById('copy-id');
+//             if (!copyButton) return;
+//             const originalText = copyButton.textContent;
+//             copyButton.textContent = 'Copied! 👍';
+//             setTimeout(() => {
+//                 const currentCopyButton = document.getElementById('copy-id');
+//                 if (currentCopyButton) {
+//                     currentCopyButton.textContent = originalText;
+//                 }
+//             }, 1500);
+//         }, (err) => {
+//             console.error('Failed to copy ID: ', err);
+//             displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Failed to copy ID.');
+//         });
+//     }
+
+//     function displayQrCode(id) {
+//         if (!id || !qrCodeCanvas || !qrCodeContainer) {
+//             console.warn("Cannot display QR code: Missing ID or canvas/container element.");
+//             if (qrCodeContainer) qrCodeContainer.style.display = 'none';
+//             return;
+//         }
+//         if (typeof QRCode === 'undefined') {
+//             console.error("QRCode library is not loaded. Cannot generate QR code.");
+//             qrCodeContainer.innerHTML = '<p>Error: QR Code library not loaded.</p>';
+//             qrCodeContainer.style.display = 'block';
+//             return;
+//         }
+
+//         // --- Define your desired colors ---
+//         const qrCodeColors = {
+//             dark: "#2fd366", // Example: Dark blue for the modules
+//             light: "#0000"  // Example: Light grey for the background
+//             // light: "#0000" // Use this for a transparent background (RGBA format)
+//         };
+
+//         // --- Pass the colors in the options ---
+//         QRCode.toCanvas(qrCodeCanvas, id, {
+//             width: 160,
+//             margin: 1,
+//             color: qrCodeColors // Add the color option here
+//          }, (error) => {
+//             if (error) {
+//                 console.error("QR Code generation failed:", error);
+//                 qrCodeContainer.innerHTML = '<p>Error generating QR code.</p>';
+//                 // Ensure container is visible even on error to show the message
+//                 qrCodeContainer.style.display = 'block';
+//             } else {
+//                 console.log('QR Code generated successfully with custom colors.');
+//                 qrCodeContainer.style.display = 'block';
+//             }
+//         });
+//     }
+
+//     function updatePeerList() {
+//         let statusContent = '';
+//         if (peer.id) {
+//             statusContent = `Your ID: <code>${peer.id}</code> <button id="copy-id"><i class='bi bi-copy'></i> Copy ID</button>`;
+//         } else {
+//             statusContent = 'Initializing Peer...';
+//         }
+
+//         const connectedPeerIds = Object.keys(connections);
+//         // if (connectedPeerIds.length > 0) {
+//         //     statusContent += ` | Connected to: ${connectedPeerIds.join(', ')}`;
+//         // }
+//         status.innerHTML = statusContent;
+
+//         const copyBtn = document.getElementById('copy-id');
+//         if (copyBtn) {
+//             const currentPeerId = peer.id;
+//             copyBtn.addEventListener('click', () => copyPeerId(currentPeerId));
+//         }
+
+//         peerList.innerHTML = '';
+//         if (!connectedPeerIds.length) {
+//             peerList.innerHTML = '<li>No active data connections.</li>';
+//             peerList.innerHTML += '<li>Share your QR code or ID, or connect manually.</li>';
+//             return;
+//         }
+
+//         connectedPeerIds.forEach(pid => {
+//             const li = document.createElement('li');
+//             li.textContent = pid;
+//             const disconnectBtn = document.createElement('button');
+//             disconnectBtn.textContent = 'Disconnect';
+//             disconnectBtn.style.marginLeft = '10px';
+//             disconnectBtn.onclick = () => {
+//                 if (connections[pid]) {
+//                     console.log(`Manually disconnecting from ${pid}`);
+//                     connections[pid].close();
+//                 }
+//             };
+//             li.appendChild(disconnectBtn);
+//             peerList.appendChild(li);
+//         });
+//     }
+
+//     // --- File Selection ---
+//     fileInput.addEventListener('change', e => {
+//         selectedFiles = Array.from(e.target.files);
+//         fileList.innerHTML = '';
+//         sendProgressList.innerHTML = '';
+//         if (selectedFiles.length === 0) {
+//              fileList.innerHTML = '<li>No files selected.</li>';
+//              return;
+//         }
+//         selectedFiles.forEach(f => {
+//             const li = document.createElement('li');
+//             li.textContent = `${f.name} (${formatBytes(f.size)})`;
+//             fileList.appendChild(li);
+//         });
+//         e.target.value = null;
+//     });
+
+//     // --- Send Files with Progress ---
+//     sendButton.addEventListener('click', () => {
+//         if (!selectedFiles.length) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'No files selected.');
+//         const peersToSendTo = Object.values(connections);
+//         if (!peersToSendTo.length) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'No peers connected for sending files.');
+
+//         sendProgressList.innerHTML = ''; // Clear previous send progress UI
+
+//         selectedFiles.forEach(file => {
+//             peersToSendTo.forEach(conn => {
+//                 // Double-check connection is open and valid before starting send
+//                 if (!conn || !conn.open || !connections[conn.peer]) {
+//                     console.warn(`Skipping send to ${conn.peer}, connection not open or invalid.`);
+//                     const failedLi = document.createElement('li');
+//                     failedLi.textContent = `Sending ${file.name} to ${conn.peer}: Failed (Connection Closed)`;
+//                     sendProgressList.appendChild(failedLi);
+//                     return; // Skip to next peer
+//                 }
+
+//                 // Create a unique ID for the progress element, sanitizing file name
+//                 const safeFileName = file.name.replace(/[^a-zA-Z0-9_-]/g, '-'); // Basic sanitization
+//                 const progressId = `send-${conn.peer}-${safeFileName}`;
+
+//                 // Create progress UI element
+//                 const li = document.createElement('li');
+//                 li.id = progressId;
+//                 const label = document.createTextNode(`Sending ${file.name} to ${conn.peer}: `);
+//                 const progress = document.createElement('progress');
+//                 progress.max = file.size;
+//                 progress.value = 0;
+//                 li.append(label, progress); // Append progress bar initially
+//                 sendProgressList.appendChild(li);
+
+//                 // --- Step 1: Send Metadata First ---
+//                 const metadata = {
+//                     type: 'file-metadata',
+//                     fileName: file.name,
+//                     totalSize: file.size
+//                 };
+//                 console.log(`Sending metadata for ${file.name} to ${conn.peer}`);
+//                 try {
+//                     conn.send(metadata);
+
+//                     // --- Step 2: Start sending chunks AFTER sending metadata ---
+//                     // Note: We don't explicitly wait for an ACK here, relying on the reliable channel
+//                     // to deliver metadata before (or close enough to) the first chunk.
+//                     sendFileChunked(file, conn, progress, li);
+
+//                 } catch (error) {
+//                      console.error(`Error sending metadata for ${file.name} to ${conn.peer}:`, error);
+//                      li.textContent = `Sending ${file.name} to ${conn.peer}: Metadata Send Error`;
+//                      li.style.color = 'red';
+//                      progress?.remove(); // Remove progress bar on metadata error
+//                      // Optionally close connection
+//                      // if (connections[conn.peer]) connections[conn.peer].close();
+//                 }
+//             });
+//         });
+
+//         // Clear file selection after initiating sends
+//         selectedFiles = [];
+//         fileList.innerHTML = '<li>No files selected.</li>';
+//     });
+
+//     // Helper function to send a file in chunks
+//     function sendFileChunked(file, conn, progressBar, progressElement) {
+//         const chunkSize = 64 * 1024; // 64KB
+//         let offset = 0;
+//         const peerId = conn.peer; // Capture peerId in case conn object becomes invalid later
+
+//         function readSlice() {
+//             if (!connections[peerId] || !connections[peerId].open) {
+//                 console.warn(`Connection to ${peerId} lost during send of ${file.name}. Aborting send.`);
+//                 progressElement.textContent = `Sending ${file.name} to ${peerId}: Failed (Disconnected)`;
+//                 progressBar?.remove();
+//                 return;
+//             }
+
+//             const slice = file.slice(offset, offset + chunkSize);
+//             const reader = new FileReader();
+
+//             reader.onload = evt => {
+//                 if (!connections[peerId] || !connections[peerId].open) {
+//                    console.warn(`Connection to ${peerId} lost just before sending chunk for ${file.name}. Aborting send.`);
+//                    progressElement.textContent = `Sending ${file.name} to ${peerId}: Failed (Disconnected)`;
+//                    progressBar?.remove();
+//                    return;
+//                 }
+//                 try {
+//                     const isLastChunk = offset + slice.size >= file.size;
+//                     // --- Metadata Change: Remove totalSize from chunk data ---
+//                     const chunkData = {
+//                         type: 'file-chunk',
+//                         fileName: file.name, // Still useful for matching chunks to transfers
+//                         chunk: evt.target.result, // ArrayBuffer
+//                         isLast: isLastChunk
+//                         // totalSize is removed here
+//                     };
+
+//                     conn.send(chunkData);
+
+//                     offset += slice.size;
+//                     if (progressBar) progressBar.value = offset;
+
+//                     if (offset < file.size) {
+//                         setTimeout(readSlice, 0);
+//                     } else {
+//                         console.log(`Finished sending ${file.name} to ${peerId}`);
+//                         progressElement.textContent = `Sent ${file.name} to ${peerId} (${formatBytes(file.size)})`;
+//                         progressBar?.remove();
+//                     }
+//                 } catch (error) {
+//                     console.error(`Error sending chunk for ${file.name} to ${peerId}:`, error);
+//                     progressElement.textContent = `Sending ${file.name} to ${peerId}: Error`;
+//                     progressBar?.remove();
+//                     if (connections[peerId]) connections[peerId].close();
+//                 }
+//             };
+
+//             reader.onerror = (err) => {
+//                 console.error(`FileReader error for ${file.name}:`, err);
+//                 displayPopup("<i class='bi bi-info-circle-fill'></i>" + `Error reading file ${file.name}. Cannot send.`);
+//                 progressElement.textContent = `Sending ${file.name} to ${peerId}: Read Error`;
+//                 progressBar?.remove();
+//             };
+
+//             reader.readAsArrayBuffer(slice);
+//         }
+//         readSlice(); // Start the sending process
+//     }
+
+
+//     // --- Receive & Reassemble File Chunks ---
+//     function handleData(data, conn) {
+//         const key = `${conn.peer}:${data.fileName}`;
+//         // Sanitize key for use as a DOM ID
+//         const sanitizedKey = key.replace(/[^a-zA-Z0-9_-]/g, '-');
+
+//         // --- Handle Metadata Message ---
+//         if (data.type === 'file-metadata' && data.fileName && data.totalSize !== undefined) {
+//             console.log(`Received metadata for ${data.fileName} (${formatBytes(data.totalSize)}) from ${conn.peer}`);
+
+//             // Check if transfer already exists (e.g., duplicate metadata message)
+//             if (incomingTransfers[key]) {
+//                 console.warn(`Received duplicate metadata for ongoing transfer: ${key}. Ignoring.`);
+//                 return;
+//             }
+//              // Check if a previous transfer failed and element still exists
+//              const existingLi = document.getElementById(`receive-${sanitizedKey}`);
+//              if (existingLi) {
+//                  console.warn(`UI element for ${key} already exists. Removing old element before starting new transfer.`);
+//                  existingLi.remove();
+//              }
+
+
+//             // Create progress UI element
+//             const li = document.createElement('li');
+//             li.id = `receive-${sanitizedKey}`;
+//             const label = document.createTextNode(`Receiving ${data.fileName} from ${conn.peer}: `);
+//             const progress = document.createElement('progress');
+//             progress.max = data.totalSize;
+//             progress.value = 0;
+//             li.append(label, progress);
+//             receivedFiles.appendChild(li); // Add to the received files list
+
+//             // Initialize transfer state in memory
+//             incomingTransfers[key] = {
+//                 buffer: [],
+//                 receivedBytes: 0,
+//                 totalSize: data.totalSize,
+//                 progressElement: li // Store reference to the UI element
+//             };
+
+//         // --- Handle File Chunk Message ---
+//         } else if (data.type === 'file-chunk' && data.fileName && data.chunk) {
+//             const transfer = incomingTransfers[key];
+
+//             // Check if metadata was received first
+//             if (!transfer) {
+//                 console.error(`Received file chunk for ${data.fileName} from ${conn.peer} before metadata. Discarding chunk. Ensure reliable connection.`);
+//                 // Optionally, try to find/update a UI element if one exists from a previous failed attempt
+//                  const existingLi = document.getElementById(`receive-${sanitizedKey}`);
+//                  if (existingLi && !existingLi.querySelector('a')) { // If it's still showing progress/error
+//                      existingLi.textContent = `Error receiving ${data.fileName} from ${conn.peer} (Missing Metadata)`;
+//                  }
+//                 return; // Cannot process chunk without knowing total size etc.
+//             }
+
+//             // Ensure chunk is ArrayBuffer
+//             const chunkBuffer = data.chunk instanceof ArrayBuffer ? data.chunk : new Uint8Array(data.chunk).buffer;
+
+//             transfer.buffer.push(chunkBuffer);
+//             transfer.receivedBytes += chunkBuffer.byteLength;
+
+//             // Update progress bar UI
+//             const progressBar = transfer.progressElement.querySelector('progress');
+//             if (progressBar) {
+//                 progressBar.value = transfer.receivedBytes;
+//             } else {
+//                  console.warn("Progress bar not found for active transfer:", key);
+//             }
+
+//             // --- Last Chunk / Completion Check ---
+//             if (data.isLast) {
+//                 if (transfer.receivedBytes === transfer.totalSize) {
+//                     // Successfully received all bytes
+//                     // Attempt to get file type (MIME type) - Note: This info isn't sent currently.
+//                     // We could add 'fileType: file.type' to the metadata message if needed.
+//                     const fileType = 'application/octet-stream'; // Default type
+//                     const blob = new Blob(transfer.buffer, { type: fileType });
+//                     const url = URL.createObjectURL(blob);
+
+//                     // Replace progress bar with a download link
+//                     const a = document.createElement('a');
+//                     a.href = url;
+//                     a.download = data.fileName;
+//                     a.textContent = `${data.fileName} (${formatBytes(transfer.totalSize)})`;
+//                     transfer.progressElement.innerHTML = '';
+//                     transfer.progressElement.append(a, document.createTextNode(` (from ${conn.peer})`));
+
+//                     console.log(`Finished receiving ${data.fileName} from ${conn.peer}`);
+//                 } else {
+//                     // Error: Received 'last chunk' flag but byte count doesn't match
+//                     console.error(`File transfer incomplete for ${data.fileName} from ${conn.peer}. Expected ${transfer.totalSize} bytes, received ${transfer.receivedBytes}`);
+//                     transfer.progressElement.textContent = `Error receiving ${data.fileName} from ${conn.peer} (Incomplete)`;
+//                 }
+//                 // Clean up transfer state from memory
+//                 delete incomingTransfers[key];
+//             }
+//         } else {
+//             // Handle other data types if needed
+//             console.log(`Received unknown data type from ${conn.peer}:`, data);
+//         }
+//     }
+
+//     // --- Cleanup for Incomplete Transfers on Disconnect/Error ---
+//     function cleanupIncompleteTransfers(peerId) {
+//         // Incoming transfers
+//         for (const key in incomingTransfers) {
+//             if (key.startsWith(peerId + ':')) {
+//                 const transfer = incomingTransfers[key];
+//                 if (transfer.progressElement && !transfer.progressElement.querySelector('a')) {
+//                     transfer.progressElement.textContent = `Failed receiving ${key.split(':')[1]} from ${peerId} (Disconnected)`;
+//                 }
+//                 delete incomingTransfers[key];
+//                 console.log(`Cleaned up incomplete incoming transfer ${key}`);
+//             }
+//         }
+//          // Outgoing transfers (UI update)
+//         const sendingItems = sendProgressList.querySelectorAll('li');
+//         sendingItems.forEach(item => {
+//             const parts = item.id.split('-');
+//             if (parts.length >= 3 && parts[0] === 'send' && parts[1] === peerId) {
+//                  if (item.querySelector('progress')) {
+//                      item.textContent += " - Failed (Disconnected)";
+//                      item.querySelector('progress').remove();
+//                  }
+//             }
+//         });
+//     }
+
+//     // --- Utility Function: Format Bytes ---
+//     function formatBytes(bytes, decimals = 2) {
+//         if (bytes === null || bytes === undefined || isNaN(bytes) || bytes === 0) return '0 Bytes';
+//         const k = 1024;
+//         const dm = decimals < 0 ? 0 : decimals;
+//         const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+//         const i = Math.floor(Math.log(bytes) / Math.log(k));
+//         return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+//     }
+
+// }); // End DOMContentLoaded
 // index.js
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,7 +594,6 @@ document.addEventListener('DOMContentLoaded', () => {
         popupTimeoutId = setTimeout(() => {
             popup.classList.remove('show');
             // Optional: Clear content after hiding animation completes
-            // You might want a slight delay if you have CSS transitions
             setTimeout(() => {
                 if (!popup.classList.contains('show')) { // Check if it wasn't shown again quickly
                    popup.innerHTML = '';
@@ -29,12 +603,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000); // Hide after 3 seconds from the *last* call
     }
 
-    // --- Constants ---
-    // DISCOVERY_ID removed
+    // --- Cute Name Generation ---
+    const adjectives = ['Sparkly', 'Fluffy', 'Happy', 'Brave', 'Clever', 'Witty', 'Sunny', 'Cozy', 'Gentle', 'Lucky', 'Chirpy', 'Gleeful'];
+    const nouns = ['Panda', 'Unicorn', 'Kitten', 'Puppy', 'Fox', 'Badger', 'Sparrow', 'Dolphin', 'Otter', 'Rabbit', 'Hedgehog', 'Firefly'];
+
+    function generateCuteName() {
+        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+        const noun = nouns[Math.floor(Math.random() * nouns.length)];
+        // Add a small random number for extra uniqueness, though collisions are unlikely
+        const num = Math.floor(Math.random() * 90) + 10; // 10-99
+        return `${adj}${noun}${num}`;
+    }
 
     // --- Globals & DOM References ---
+    let localPeerName = generateCuteName(); // Generate name immediately
     const peer = new Peer(); // Always let PeerJS generate the ID
-    const connections = {}; // { peerId: DataConnection } - For DATA connections
+    // Store connection object AND the remote peer's cute name
+    // Structure: { peerId: { conn: DataConnection, name: string } }
+    const connections = {};
     const fileInput = document.getElementById('file-input');
     const sendButton = document.getElementById('send-button');
     const fileList = document.getElementById('file-list');
@@ -50,37 +636,43 @@ document.addEventListener('DOMContentLoaded', () => {
     fileList.parentNode.insertBefore(sendProgressList, fileList.nextSibling);
 
     // Buffer and progress tracking for incoming files
-    // Structure: { "peerId:fileName": { buffer: [...], receivedBytes: 0, totalSize: 0, progressElement: Element } }
+    // Structure: { "peerId:fileName": { buffer: [...], receivedBytes: 0, totalSize: 0, progressElement: Element, peerName: string } }
     const incomingTransfers = {};
 
     // --- Peer Setup ---
     peer.on('open', id => {
-        console.log(`PeerJS initialized. Your ID: ${id}`);
-        status.innerHTML = `Your ID: <code>${id}</code><button id="copy-id"><i class='bi bi-copy'></i> Copy ID</button>`;
+        console.log(`PeerJS initialized. Your Name: ${localPeerName}, ID: ${id}`);
+        // Update status to show name and ID
+        status.innerHTML = `Your Name: <strong>${localPeerName}</strong> (ID: <code>${id}</code>) <button id="copy-id" title="Copy Peer ID"><i class='bi bi-copy'></i> Copy ID</button>`;
         document.getElementById('copy-id')?.addEventListener('click', () => copyPeerId(id));
-        displayQrCode(id);
+        displayQrCode(id); // QR code still uses the ID for connection
         updatePeerList();
     });
 
     peer.on('error', err => {
         console.error("PeerJS error:", err);
         let alertMsg = `An error occurred with PeerJS: ${err.type}`;
+        let peerIdentifier = 'peer'; // Default identifier
 
-        // Simplified error handling without hub specifics
         if (err.type === 'peer-unavailable') {
             const attemptedPeer = err.message.match(/Could not connect to peer (.*?)$/);
-            alertMsg = `Could not connect to peer ${attemptedPeer ? attemptedPeer[1] : ''}. Peer ID might be incorrect or the peer is offline.`;
+            const attemptedPeerId = attemptedPeer ? attemptedPeer[1] : '';
+            // Try to find the name if we attempted connection before error
+            const peerName = connections[attemptedPeerId]?.name || attemptedPeerId;
+            peerIdentifier = peerName || 'The peer';
+            alertMsg = `Could not connect to ${peerIdentifier}. ID might be incorrect or the peer is offline.`;
         } else if (err.type === 'network') {
             alertMsg = `Network error. Please check your connection.`;
         } else if (err.type === 'unavailable-id') {
             alertMsg = `The generated Peer ID (${peer.id}) is already taken. Please refresh the page to get a new ID.`;
+             localPeerName = generateCuteName(); // Regenerate name on ID conflict
         } else if (err.type === 'disconnected') {
             alertMsg = `Disconnected from the PeerJS signaling server. Please refresh.`;
         } else if (err.type === 'server-error') {
             alertMsg = `Error connecting to the PeerJS signaling server.`;
         }
 
-        if (alertMsg) displayPopup("<i class='bi bi-info-circle-fill'></i>" + alertMsg);
+        if (alertMsg) displayPopup("<i class='bi bi-info-circle-fill'></i> " + alertMsg);
 
         // Reset manual connection UI elements
         const connectInput = document.getElementById('peer-id-input');
@@ -90,14 +682,16 @@ document.addEventListener('DOMContentLoaded', () => {
             connectButton.disabled = false;
             connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
         }
-        updatePeerList();
+        updatePeerList(); // Update list to reflect potential disconnections
     });
 
 
     peer.on('connection', conn => {
-        console.log(`Incoming connection from ${conn.peer} with metadata:`, conn.metadata);
-        console.log(`Accepting data connection from peer ${conn.peer}`);
-        setupConnection(conn);
+        // Metadata should contain the remote peer's name
+        const remotePeerName = conn.metadata?.name || `Peer_${conn.peer.substring(0, 4)}`;
+        console.log(`Incoming connection from ${remotePeerName} (${conn.peer}) with metadata:`, conn.metadata);
+        console.log(`Accepting data connection from ${remotePeerName} (${conn.peer})`);
+        setupConnection(conn, remotePeerName); // Pass the name
     });
 
     // --- Dial-in UI (Manual Connection) ---
@@ -112,45 +706,69 @@ document.addEventListener('DOMContentLoaded', () => {
 
     connectButton.addEventListener('click', () => {
         const remoteId = connectInput.value.trim();
-        if (!remoteId) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Please enter a peer ID.');
-        if (connections[remoteId]) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Already connected to ' + remoteId);
-        if (remoteId === peer.id) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + "You cannot connect to yourself.");
+        if (!remoteId) return displayPopup("<i class='bi bi-info-circle-fill'></i> Please enter a peer ID.");
+        if (connections[remoteId]) return displayPopup(`<i class='bi bi-info-circle-fill'></i> Already connected to ${connections[remoteId].name} (${remoteId})`);
+        if (remoteId === peer.id) return displayPopup("<i class='bi bi-info-circle-fill'></i> You cannot connect to yourself.");
 
         console.log(`Attempting to connect manually to ${remoteId}...`);
         connectButton.disabled = true;
         connectButton.textContent = 'Connecting...';
 
-        const conn = peer.connect(remoteId, { reliable: true });
+        // Send our cute name in the metadata
+        const conn = peer.connect(remoteId, {
+             reliable: true,
+             metadata: { name: localPeerName }
+        });
 
+        // We don't know the remote name yet, will get it on 'open' or use default in setupConnection
         conn.on('error', (err) => {
             console.error(`Manual connection error with ${remoteId}:`, err);
-            displayPopup("<i class='bi bi-info-circle-fill'></i>" + `Failed to connect to ${remoteId}. Error: ${err.type}`);
+            // Use ID here as we might not have the name yet
+            displayPopup(`<i class='bi bi-info-circle-fill'></i> Failed to connect to ${remoteId}. Error: ${err.type}`);
             if (connectInput.value === remoteId || connectButton.textContent === 'Connecting...') {
                  connectButton.disabled = false;
                  connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
             }
         });
-        setupConnection(conn);
+        // Pass a temporary name/placeholder until 'open' confirms metadata
+        setupConnection(conn, `Peer_${remoteId.substring(0, 4)}`);
     });
 
     // --- Connection Handler (for DATA connections ONLY) ---
-    function setupConnection(conn) {
+    // Added remotePeerName parameter
+    function setupConnection(conn, remotePeerName) {
         const remotePeerId = conn.peer;
 
+        // Check using the new structure
         if (connections[remotePeerId]) {
-            console.log(`Already have an active data connection to ${remotePeerId}. Ignoring duplicate setup request.`);
-            if (connections[remotePeerId] !== conn) {
+            const existingName = connections[remotePeerId].name;
+            console.log(`Already have an active data connection to ${existingName} (${remotePeerId}). Ignoring duplicate setup request.`);
+            // Close the new incoming connection if it's different from the existing one
+            if (connections[remotePeerId].conn !== conn) {
                  conn.close();
             }
             return;
         }
 
-        console.log(`Setting up data connection with ${remotePeerId}`);
-        connections[remotePeerId] = conn;
-        updatePeerList();
+        console.log(`Setting up data connection with ${remotePeerName} (${remotePeerId})`);
+        // Store connection and name
+        connections[remotePeerId] = { conn: conn, name: remotePeerName };
+        updatePeerList(); // Update UI immediately with the name
 
         conn.on('open', () => {
-            console.log(`Data connection established with ${remotePeerId}`);
+            // Metadata *should* be available now if this was an incoming connection
+            // Or if it was outgoing, the connection is established.
+            // Update name if metadata provides a different one (e.g., manual connect case)
+            const confirmedName = conn.metadata?.name || remotePeerName; // Prioritize metadata name
+            if (connections[remotePeerId]) { // Check if connection still exists
+                 connections[remotePeerId].name = confirmedName;
+            }
+
+            console.log(`Data connection established with ${confirmedName} (${remotePeerId})`);
+            displayPopup(`<i class='bi bi-check-circle-fill'></i> Connected to ${confirmedName}`);
+            updatePeerList(); // Update list again in case name was confirmed/changed
+
+            // Reset manual connection button if applicable
             const connectButton = document.getElementById('connect-button');
             const connectInput = document.getElementById('peer-id-input');
             if (connectButton && connectInput.value === remotePeerId) {
@@ -160,23 +778,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        conn.on('data', data => handleData(data, conn));
+        conn.on('data', data => handleData(data, conn)); // Pass conn to get peerId and name
 
         conn.on('close', () => {
-            console.log(`Data connection closed with ${remotePeerId}`);
+            const closedPeerName = connections[remotePeerId]?.name || remotePeerId;
+            console.log(`Data connection closed with ${closedPeerName} (${remotePeerId})`);
             if (connections[remotePeerId]) {
                 delete connections[remotePeerId];
                 updatePeerList();
-                cleanupIncompleteTransfers(remotePeerId);
+                cleanupIncompleteTransfers(remotePeerId, closedPeerName); // Pass name for cleanup messages
+                displayPopup(`<i class='bi bi-info-circle-fill'></i> Disconnected from ${closedPeerName}`);
             }
         });
 
         conn.on('error', (err) => {
-             console.error(`Error on data connection with ${remotePeerId}:`, err);
+             const errorPeerName = connections[remotePeerId]?.name || remotePeerId;
+             console.error(`Error on data connection with ${errorPeerName} (${remotePeerId}):`, err);
+             displayPopup(`<i class='bi bi-exclamation-triangle-fill'></i> Connection error with ${errorPeerName}: ${err.type}`);
              if (connections[remotePeerId]) {
                  delete connections[remotePeerId];
                  updatePeerList();
-                 cleanupIncompleteTransfers(remotePeerId);
+                 cleanupIncompleteTransfers(remotePeerId, errorPeerName); // Pass name
              }
         });
     }
@@ -188,21 +810,25 @@ document.addEventListener('DOMContentLoaded', () => {
         navigator.clipboard.writeText(id).then(() => {
             const copyButton = document.getElementById('copy-id');
             if (!copyButton) return;
-            const originalText = copyButton.textContent;
-            copyButton.textContent = 'Copied! 👍';
+            const originalContent = copyButton.innerHTML; // Store innerHTML
+            const originalTitle = copyButton.title;
+            copyButton.innerHTML = "<i class='bi bi-check-lg'></i> Copied!";
+            copyButton.title = 'Copied!';
             setTimeout(() => {
                 const currentCopyButton = document.getElementById('copy-id');
-                if (currentCopyButton) {
-                    currentCopyButton.textContent = originalText;
+                if (currentCopyButton && currentCopyButton.title === 'Copied!') { // Check if it's still the 'Copied!' state
+                    currentCopyButton.innerHTML = originalContent;
+                    currentCopyButton.title = originalTitle;
                 }
             }, 1500);
         }, (err) => {
             console.error('Failed to copy ID: ', err);
-            displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Failed to copy ID.');
+            displayPopup("<i class='bi bi-info-circle-fill'></i> Failed to copy ID.");
         });
     }
 
     function displayQrCode(id) {
+        // ... (QR code generation remains the same, using the ID)
         if (!id || !qrCodeCanvas || !qrCodeContainer) {
             console.warn("Cannot display QR code: Missing ID or canvas/container element.");
             if (qrCodeContainer) qrCodeContainer.style.display = 'none';
@@ -214,69 +840,63 @@ document.addEventListener('DOMContentLoaded', () => {
             qrCodeContainer.style.display = 'block';
             return;
         }
-
-        // --- Define your desired colors ---
-        const qrCodeColors = {
-            dark: "#2fd366", // Example: Dark blue for the modules
-            light: "#0000"  // Example: Light grey for the background
-            // light: "#0000" // Use this for a transparent background (RGBA format)
-        };
-
-        // --- Pass the colors in the options ---
-        QRCode.toCanvas(qrCodeCanvas, id, {
-            width: 160,
-            margin: 1,
-            color: qrCodeColors // Add the color option here
-         }, (error) => {
+        const qrCodeColors = { dark: "#2fd366", light: "#0000" };
+        QRCode.toCanvas(qrCodeCanvas, id, { width: 160, margin: 1, color: qrCodeColors }, (error) => {
             if (error) {
                 console.error("QR Code generation failed:", error);
                 qrCodeContainer.innerHTML = '<p>Error generating QR code.</p>';
-                // Ensure container is visible even on error to show the message
                 qrCodeContainer.style.display = 'block';
             } else {
-                console.log('QR Code generated successfully with custom colors.');
+                console.log('QR Code generated successfully.');
                 qrCodeContainer.style.display = 'block';
             }
         });
     }
 
     function updatePeerList() {
+        // Update status line first
         let statusContent = '';
         if (peer.id) {
-            statusContent = `Your ID: <code>${peer.id}</code> <button id="copy-id"><i class='bi bi-copy'></i> Copy ID</button>`;
+            // Show Name, ID, and Copy Button
+            statusContent = `Your Name: <strong>${localPeerName}</strong> (ID: <code>${peer.id}</code>) <button id="copy-id" title="Copy Peer ID"><i class='bi bi-copy'></i> Copy ID</button>`;
         } else {
             statusContent = 'Initializing Peer...';
         }
-
-        const connectedPeerIds = Object.keys(connections);
-        // if (connectedPeerIds.length > 0) {
-        //     statusContent += ` | Connected to: ${connectedPeerIds.join(', ')}`;
-        // }
         status.innerHTML = statusContent;
 
+        // Re-attach copy listener if the button was recreated
         const copyBtn = document.getElementById('copy-id');
         if (copyBtn) {
-            const currentPeerId = peer.id;
+            const currentPeerId = peer.id; // Capture current ID for the listener
             copyBtn.addEventListener('click', () => copyPeerId(currentPeerId));
         }
 
-        peerList.innerHTML = '';
-        if (!connectedPeerIds.length) {
-            peerList.innerHTML = '<li>No active data connections.</li>';
+        // Update connected peers list
+        peerList.innerHTML = ''; // Clear current list
+        const connectedPeers = Object.entries(connections); // Get [peerId, {conn, name}] pairs
+
+        if (!connectedPeers.length) {
+            peerList.innerHTML = '<li>No active connections.</li>';
             peerList.innerHTML += '<li>Share your QR code or ID, or connect manually.</li>';
             return;
         }
 
-        connectedPeerIds.forEach(pid => {
+        peerList.innerHTML = '<li><strong>Connected Peers:</strong></li>'; // Add a header
+        connectedPeers.forEach(([pid, data]) => {
             const li = document.createElement('li');
-            li.textContent = pid;
+            // Display the cute name prominently, maybe with ID hint
+            li.innerHTML = `<strong>${data.name}</strong> <small>(${pid.substring(0, 6)}...)</small>`; // Use innerHTML to allow strong tag
+
             const disconnectBtn = document.createElement('button');
-            disconnectBtn.textContent = 'Disconnect';
+            disconnectBtn.innerHTML = '<i class="bi bi-x-circle"></i> Disconnect'; // Use icon
+            disconnectBtn.title = `Disconnect from ${data.name}`;
             disconnectBtn.style.marginLeft = '10px';
+            disconnectBtn.style.padding = '2px 5px'; // Make button smaller
+            disconnectBtn.style.fontSize = '0.8em';
             disconnectBtn.onclick = () => {
                 if (connections[pid]) {
-                    console.log(`Manually disconnecting from ${pid}`);
-                    connections[pid].close();
+                    console.log(`Manually disconnecting from ${data.name} (${pid})`);
+                    connections[pid].conn.close(); // Close the actual connection
                 }
             };
             li.appendChild(disconnectBtn);
@@ -288,7 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.addEventListener('change', e => {
         selectedFiles = Array.from(e.target.files);
         fileList.innerHTML = '';
-        sendProgressList.innerHTML = '';
+        sendProgressList.innerHTML = ''; // Clear potential previous send progress
         if (selectedFiles.length === 0) {
              fileList.innerHTML = '<li>No files selected.</li>';
              return;
@@ -298,40 +918,46 @@ document.addEventListener('DOMContentLoaded', () => {
             li.textContent = `${f.name} (${formatBytes(f.size)})`;
             fileList.appendChild(li);
         });
-        e.target.value = null;
+        e.target.value = null; // Allow selecting the same file again
     });
 
     // --- Send Files with Progress ---
     sendButton.addEventListener('click', () => {
-        if (!selectedFiles.length) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'No files selected.');
+        if (!selectedFiles.length) return displayPopup("<i class='bi bi-info-circle-fill'></i> No files selected.");
+        // Get connection data {conn, name} for each connected peer
         const peersToSendTo = Object.values(connections);
-        if (!peersToSendTo.length) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'No peers connected for sending files.');
+        if (!peersToSendTo.length) return displayPopup("<i class='bi bi-info-circle-fill'></i> No peers connected for sending files.");
 
         sendProgressList.innerHTML = ''; // Clear previous send progress UI
 
         selectedFiles.forEach(file => {
-            peersToSendTo.forEach(conn => {
+            peersToSendTo.forEach(connData => { // connData is { conn, name }
+                const conn = connData.conn;
+                const peerName = connData.name;
+                const peerId = conn.peer; // Still need ID for internal tracking
+
                 // Double-check connection is open and valid before starting send
-                if (!conn || !conn.open || !connections[conn.peer]) {
-                    console.warn(`Skipping send to ${conn.peer}, connection not open or invalid.`);
+                if (!conn || !conn.open || !connections[peerId]) {
+                    console.warn(`Skipping send to ${peerName} (${peerId}), connection not open or invalid.`);
                     const failedLi = document.createElement('li');
-                    failedLi.textContent = `Sending ${file.name} to ${conn.peer}: Failed (Connection Closed)`;
+                    failedLi.textContent = `Sending ${file.name} to ${peerName}: Failed (Connection Closed)`;
+                    failedLi.style.color = 'orange';
                     sendProgressList.appendChild(failedLi);
                     return; // Skip to next peer
                 }
 
-                // Create a unique ID for the progress element, sanitizing file name
-                const safeFileName = file.name.replace(/[^a-zA-Z0-9_-]/g, '-'); // Basic sanitization
-                const progressId = `send-${conn.peer}-${safeFileName}`;
+                // Create a unique ID for the progress element using PEER ID and sanitized file name
+                const safeFileName = file.name.replace(/[^a-zA-Z0-9_-]/g, '-');
+                const progressId = `send-${peerId}-${safeFileName}`; // Use peerId for reliable ID
 
-                // Create progress UI element
+                // Create progress UI element, using the PEER NAME for display
                 const li = document.createElement('li');
                 li.id = progressId;
-                const label = document.createTextNode(`Sending ${file.name} to ${conn.peer}: `);
+                const label = document.createTextNode(`Sending ${file.name} to ${peerName}: `);
                 const progress = document.createElement('progress');
                 progress.max = file.size;
                 progress.value = 0;
-                li.append(label, progress); // Append progress bar initially
+                li.append(label, progress);
                 sendProgressList.appendChild(li);
 
                 // --- Step 1: Send Metadata First ---
@@ -339,23 +965,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     type: 'file-metadata',
                     fileName: file.name,
                     totalSize: file.size
+                    // No need to send sender name here, receiver knows from connection
                 };
-                console.log(`Sending metadata for ${file.name} to ${conn.peer}`);
+                console.log(`Sending metadata for ${file.name} to ${peerName} (${peerId})`);
                 try {
                     conn.send(metadata);
-
-                    // --- Step 2: Start sending chunks AFTER sending metadata ---
-                    // Note: We don't explicitly wait for an ACK here, relying on the reliable channel
-                    // to deliver metadata before (or close enough to) the first chunk.
-                    sendFileChunked(file, conn, progress, li);
+                    // --- Step 2: Start sending chunks ---
+                    sendFileChunked(file, conn, progress, li, peerName); // Pass peerName for logging
 
                 } catch (error) {
-                     console.error(`Error sending metadata for ${file.name} to ${conn.peer}:`, error);
-                     li.textContent = `Sending ${file.name} to ${conn.peer}: Metadata Send Error`;
+                     console.error(`Error sending metadata for ${file.name} to ${peerName} (${peerId}):`, error);
+                     li.textContent = `Sending ${file.name} to ${peerName}: Metadata Send Error`;
                      li.style.color = 'red';
-                     progress?.remove(); // Remove progress bar on metadata error
-                     // Optionally close connection
-                     // if (connections[conn.peer]) connections[conn.peer].close();
+                     progress?.remove();
                 }
             });
         });
@@ -366,15 +988,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Helper function to send a file in chunks
-    function sendFileChunked(file, conn, progressBar, progressElement) {
+    // Added peerName parameter for better logging/UI messages
+    function sendFileChunked(file, conn, progressBar, progressElement, peerName) {
         const chunkSize = 64 * 1024; // 64KB
         let offset = 0;
-        const peerId = conn.peer; // Capture peerId in case conn object becomes invalid later
+        const peerId = conn.peer; // Capture peerId for checks
 
         function readSlice() {
-            if (!connections[peerId] || !connections[peerId].open) {
-                console.warn(`Connection to ${peerId} lost during send of ${file.name}. Aborting send.`);
-                progressElement.textContent = `Sending ${file.name} to ${peerId}: Failed (Disconnected)`;
+            // Check connection using peerId before reading/sending
+            if (!connections[peerId] || !connections[peerId].conn?.open) {
+                console.warn(`Connection to ${peerName} (${peerId}) lost during send of ${file.name}. Aborting send.`);
+                progressElement.textContent = `Sending ${file.name} to ${peerName}: Failed (Disconnected)`;
+                progressElement.style.color = 'orange';
                 progressBar?.remove();
                 return;
             }
@@ -383,21 +1008,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
 
             reader.onload = evt => {
-                if (!connections[peerId] || !connections[peerId].open) {
-                   console.warn(`Connection to ${peerId} lost just before sending chunk for ${file.name}. Aborting send.`);
-                   progressElement.textContent = `Sending ${file.name} to ${peerId}: Failed (Disconnected)`;
+                // Double-check connection right before sending
+                if (!connections[peerId] || !connections[peerId].conn?.open) {
+                   console.warn(`Connection to ${peerName} (${peerId}) lost just before sending chunk for ${file.name}. Aborting send.`);
+                   progressElement.textContent = `Sending ${file.name} to ${peerName}: Failed (Disconnected)`;
+                   progressElement.style.color = 'orange';
                    progressBar?.remove();
                    return;
                 }
                 try {
                     const isLastChunk = offset + slice.size >= file.size;
-                    // --- Metadata Change: Remove totalSize from chunk data ---
                     const chunkData = {
                         type: 'file-chunk',
-                        fileName: file.name, // Still useful for matching chunks to transfers
+                        fileName: file.name,
                         chunk: evt.target.result, // ArrayBuffer
                         isLast: isLastChunk
-                        // totalSize is removed here
                     };
 
                     conn.send(chunkData);
@@ -406,24 +1031,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (progressBar) progressBar.value = offset;
 
                     if (offset < file.size) {
+                        // Use setTimeout for non-blocking loop
                         setTimeout(readSlice, 0);
                     } else {
-                        console.log(`Finished sending ${file.name} to ${peerId}`);
-                        progressElement.textContent = `Sent ${file.name} to ${peerId} (${formatBytes(file.size)})`;
+                        console.log(`Finished sending ${file.name} to ${peerName} (${peerId})`);
+                        progressElement.textContent = `Sent ${file.name} to ${peerName} (${formatBytes(file.size)})`;
+                        progressElement.style.color = 'green'; // Indicate success
                         progressBar?.remove();
                     }
                 } catch (error) {
-                    console.error(`Error sending chunk for ${file.name} to ${peerId}:`, error);
-                    progressElement.textContent = `Sending ${file.name} to ${peerId}: Error`;
+                    console.error(`Error sending chunk for ${file.name} to ${peerName} (${peerId}):`, error);
+                    progressElement.textContent = `Sending ${file.name} to ${peerName}: Send Error`;
+                    progressElement.style.color = 'red';
                     progressBar?.remove();
-                    if (connections[peerId]) connections[peerId].close();
+                    // Optionally close connection on send error
+                    // if (connections[peerId]) connections[peerId].conn.close();
                 }
             };
 
             reader.onerror = (err) => {
                 console.error(`FileReader error for ${file.name}:`, err);
-                displayPopup("<i class='bi bi-info-circle-fill'></i>" + `Error reading file ${file.name}. Cannot send.`);
-                progressElement.textContent = `Sending ${file.name} to ${peerId}: Read Error`;
+                displayPopup(`<i class='bi bi-info-circle-fill'></i> Error reading file ${file.name}. Cannot send.`);
+                progressElement.textContent = `Sending ${file.name} to ${peerName}: Read Error`;
+                progressElement.style.color = 'red';
                 progressBar?.remove();
             };
 
@@ -435,43 +1065,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Receive & Reassemble File Chunks ---
     function handleData(data, conn) {
-        const key = `${conn.peer}:${data.fileName}`;
-        // Sanitize key for use as a DOM ID
-        const sanitizedKey = key.replace(/[^a-zA-Z0-9_-]/g, '-');
+        const peerId = conn.peer;
+        // Get peer name from our stored connections data
+        const peerName = connections[peerId]?.name || `Peer_${peerId.substring(0, 4)}`; // Fallback name
+
+        // Use peerId in the key for uniqueness, but store peerName for UI
+        const key = `${peerId}:${data.fileName}`;
+        // Sanitize key based on peerId and filename for use as a DOM ID
+        const safeFileName = data.fileName?.replace(/[^a-zA-Z0-9_-]/g, '-') || 'unknownfile';
+        const sanitizedKey = `receive-${peerId}-${safeFileName}`;
 
         // --- Handle Metadata Message ---
         if (data.type === 'file-metadata' && data.fileName && data.totalSize !== undefined) {
-            console.log(`Received metadata for ${data.fileName} (${formatBytes(data.totalSize)}) from ${conn.peer}`);
+            console.log(`Received metadata for ${data.fileName} (${formatBytes(data.totalSize)}) from ${peerName} (${peerId})`);
 
             // Check if transfer already exists (e.g., duplicate metadata message)
             if (incomingTransfers[key]) {
-                console.warn(`Received duplicate metadata for ongoing transfer: ${key}. Ignoring.`);
+                console.warn(`Received duplicate metadata for ongoing transfer: ${key} from ${peerName}. Ignoring.`);
                 return;
             }
              // Check if a previous transfer failed and element still exists
-             const existingLi = document.getElementById(`receive-${sanitizedKey}`);
+             const existingLi = document.getElementById(sanitizedKey);
              if (existingLi) {
                  console.warn(`UI element for ${key} already exists. Removing old element before starting new transfer.`);
                  existingLi.remove();
              }
 
-
-            // Create progress UI element
+            // Create progress UI element using the PEER NAME
             const li = document.createElement('li');
-            li.id = `receive-${sanitizedKey}`;
-            const label = document.createTextNode(`Receiving ${data.fileName} from ${conn.peer}: `);
+            li.id = sanitizedKey; // Use sanitized ID
+            const label = document.createTextNode(`Receiving ${data.fileName} from ${peerName}: `);
             const progress = document.createElement('progress');
             progress.max = data.totalSize;
             progress.value = 0;
             li.append(label, progress);
             receivedFiles.appendChild(li); // Add to the received files list
 
-            // Initialize transfer state in memory
+            // Initialize transfer state in memory, include peerName
             incomingTransfers[key] = {
                 buffer: [],
                 receivedBytes: 0,
                 totalSize: data.totalSize,
-                progressElement: li // Store reference to the UI element
+                progressElement: li, // Store reference to the UI element
+                peerName: peerName   // Store name for potential error messages later
             };
 
         // --- Handle File Chunk Message ---
@@ -480,11 +1116,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check if metadata was received first
             if (!transfer) {
-                console.error(`Received file chunk for ${data.fileName} from ${conn.peer} before metadata. Discarding chunk. Ensure reliable connection.`);
-                // Optionally, try to find/update a UI element if one exists from a previous failed attempt
-                 const existingLi = document.getElementById(`receive-${sanitizedKey}`);
+                console.error(`Received file chunk for ${data.fileName} from ${peerName} (${peerId}) before metadata. Discarding chunk.`);
+                 const existingLi = document.getElementById(sanitizedKey);
                  if (existingLi && !existingLi.querySelector('a')) { // If it's still showing progress/error
-                     existingLi.textContent = `Error receiving ${data.fileName} from ${conn.peer} (Missing Metadata)`;
+                     existingLi.textContent = `Error receiving ${data.fileName} from ${peerName} (Missing Metadata)`;
+                     existingLi.style.color = 'red';
                  }
                 return; // Cannot process chunk without knowing total size etc.
             }
@@ -505,58 +1141,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // --- Last Chunk / Completion Check ---
             if (data.isLast) {
+                // Use the stored peerName from the transfer object
+                const finalPeerName = transfer.peerName || peerName;
                 if (transfer.receivedBytes === transfer.totalSize) {
                     // Successfully received all bytes
-                    // Attempt to get file type (MIME type) - Note: This info isn't sent currently.
-                    // We could add 'fileType: file.type' to the metadata message if needed.
                     const fileType = 'application/octet-stream'; // Default type
                     const blob = new Blob(transfer.buffer, { type: fileType });
                     const url = URL.createObjectURL(blob);
 
-                    // Replace progress bar with a download link
+                    // Replace progress bar with a download link, showing PEER NAME
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = data.fileName;
-                    a.textContent = `${data.fileName} (${formatBytes(transfer.totalSize)})`;
-                    transfer.progressElement.innerHTML = '';
-                    transfer.progressElement.append(a, document.createTextNode(` (from ${conn.peer})`));
-                    transfer.progressElement.style.color = 'green';
+                    // Use checkmark icon for success
+                    a.innerHTML = `<i class='bi bi-check-circle-fill'></i> ${data.fileName} (${formatBytes(transfer.totalSize)})`;
+                    transfer.progressElement.innerHTML = ''; // Clear existing content
+                    transfer.progressElement.append(a, document.createTextNode(` (from ${finalPeerName})`));
+                    transfer.progressElement.style.color = 'green'; // Style completed download
 
-                    console.log(`Finished receiving ${data.fileName} from ${conn.peer}`);
+                    console.log(`Finished receiving ${data.fileName} from ${finalPeerName} (${peerId})`);
                 } else {
                     // Error: Received 'last chunk' flag but byte count doesn't match
-                    console.error(`File transfer incomplete for ${data.fileName} from ${conn.peer}. Expected ${transfer.totalSize} bytes, received ${transfer.receivedBytes}`);
-                    transfer.progressElement.textContent = `Error receiving ${data.fileName} from ${conn.peer} (Incomplete)`;
+                    console.error(`File transfer incomplete for ${data.fileName} from ${finalPeerName} (${peerId}). Expected ${transfer.totalSize} bytes, received ${transfer.receivedBytes}`);
+                    transfer.progressElement.textContent = `Error receiving ${data.fileName} from ${finalPeerName} (Incomplete)`;
+                    transfer.progressElement.style.color = 'red';
                 }
                 // Clean up transfer state from memory
                 delete incomingTransfers[key];
             }
         } else {
             // Handle other data types if needed
-            console.log(`Received unknown data type from ${conn.peer}:`, data);
+            console.log(`Received unknown data type from ${peerName} (${peerId}):`, data);
         }
     }
 
     // --- Cleanup for Incomplete Transfers on Disconnect/Error ---
-    function cleanupIncompleteTransfers(peerId) {
-        // Incoming transfers
+    // Added peerName parameter
+    function cleanupIncompleteTransfers(peerId, peerName) {
+        const nameToDisplay = peerName || `Peer_${peerId.substring(0, 4)}`; // Use provided name or generate fallback
+
+        // Incoming transfers cleanup
         for (const key in incomingTransfers) {
             if (key.startsWith(peerId + ':')) {
                 const transfer = incomingTransfers[key];
-                if (transfer.progressElement && !transfer.progressElement.querySelector('a')) {
-                    transfer.progressElement.textContent = `Failed receiving ${key.split(':')[1]} from ${peerId} (Disconnected)`;
+                const fileName = key.split(':')[1] || 'file';
+                // Use the stored name if available, otherwise the passed name
+                const finalPeerName = transfer.peerName || nameToDisplay;
+                if (transfer.progressElement && !transfer.progressElement.querySelector('a')) { // Only update if not completed
+                    transfer.progressElement.textContent = `Failed receiving ${fileName} from ${finalPeerName} (Disconnected)`;
+                    transfer.progressElement.style.color = 'orange';
+                    transfer.progressElement.querySelector('progress')?.remove();
                 }
                 delete incomingTransfers[key];
-                console.log(`Cleaned up incomplete incoming transfer ${key}`);
+                console.log(`Cleaned up incomplete incoming transfer ${key} from ${finalPeerName}`);
             }
         }
-         // Outgoing transfers (UI update)
+
+         // Outgoing transfers (UI update only)
         const sendingItems = sendProgressList.querySelectorAll('li');
         sendingItems.forEach(item => {
+            // ID format is send-${peerId}-${safeFileName}
             const parts = item.id.split('-');
             if (parts.length >= 3 && parts[0] === 'send' && parts[1] === peerId) {
-                 if (item.querySelector('progress')) {
-                     item.textContent += " - Failed (Disconnected)";
+                 if (item.querySelector('progress')) { // Only update if still in progress
+                     const fileName = item.textContent.match(/Sending (.*?) to/)?.[1] || 'file';
+                     item.textContent = `Sending ${fileName} to ${nameToDisplay}: Failed (Disconnected)`;
+                     item.style.color = 'orange';
                      item.querySelector('progress').remove();
                  }
             }
@@ -569,8 +1219,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const k = 1024;
         const dm = decimals < 0 ? 0 : decimals;
         const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+        // Handle potential log(0) or negative bytes
+        if (bytes <= 0) return '0 Bytes';
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        // Ensure i is within the bounds of the sizes array
+        const index = Math.min(i, sizes.length - 1);
+        return `${parseFloat((bytes / Math.pow(k, index)).toFixed(dm))} ${sizes[index]}`;
     }
 
 }); // End DOMContentLoaded

@@ -31,6 +31,7 @@ html,body{
     font-family: 'Reddit Sans', sans-serif;
 }
 html{
+    background-color: var(--bg1);
     background: url('/bg1.jpg') no-repeat center center / cover;
 }
 button{
@@ -48,6 +49,9 @@ button{
         margin-right: calc(var(--p1) / 2);
         font-size: large;
     }
+}
+code{
+    font-family: monospace;
 }
 input{
     font-size: small;
@@ -146,9 +150,11 @@ ul{
     margin: 0;
     li{
         display: flex;
-        padding: 0 var(--p2);
+        padding: var(--p1) var(--p2);
         font-size: small;
         a{
+            display: inline;
+            margin-right: var(--p1);
             color: var(--primary-color);
         }
     }
@@ -157,8 +163,7 @@ ul{
         color: var(--primary-color);
         font-weight: 900;
         display: inline-block;
-        width: 1em;
-        margin-left: -1em;
+        width: var(--p1);
     }
 }
 .auto-grid{
