@@ -150,20 +150,16 @@ ul{
     margin: 0;
     li{
         display: flex;
-        padding: var(--p1) var(--p2);
+        align-items: center;
+        padding: 0 var(--p2);
+        line-height: 1em;
+        margin-bottom: var(--p1);
         font-size: small;
         a{
             display: inline;
             margin-right: var(--p1);
             color: var(--primary-color);
         }
-    }
-    li:before{
-        content: "-";
-        color: var(--primary-color);
-        font-weight: 900;
-        display: inline-block;
-        width: var(--p1);
     }
 }
 .auto-grid{

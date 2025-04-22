@@ -604,15 +604,65 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Cute Name Generation ---
-    const adjectives = ['Sparkly', 'Fluffy', 'Happy', 'Brave', 'Clever', 'Witty', 'Sunny', 'Cozy', 'Gentle', 'Lucky', 'Chirpy', 'Gleeful'];
-    const nouns = ['Panda', 'Unicorn', 'Kitten', 'Puppy', 'Fox', 'Badger', 'Sparrow', 'Dolphin', 'Otter', 'Rabbit', 'Hedgehog', 'Firefly'];
+const adjectives = [
+    // Original
+    'Sparkly', 'Fluffy', 'Happy', 'Brave', 'Clever', 'Witty', 'Sunny', 'Cozy', 'Gentle', 'Lucky',
+    'Chirpy', 'Gleeful', 'Jolly', 'Dazzling', 'Radiant', 'Vibrant', 'Whimsical', 'Mystic', 'Zesty', 'Jubilant',
+    'Peppy', 'Snuggly', 'Bouncy', 'Cheeky', 'Silly', 'Goofy', 'Quirky', 'Daring', 'Nimble', 'Swift',
+    'Mighty', 'Tiny', 'Giant', 'Curious', 'Dreamy', 'Eager', 'Fierce', 'Grumpy', 'Jumpy', 'Kind',
+    'Lively', 'Magical', 'Nifty', 'Playful', 'Quiet', 'Rambunctious', 'Sassy', 'Tricky', 'Upbeat', 'Wacky',
+    'Yummy', 'Zealous',
+    // Added
+    'Adorable', 'Amused', 'Blissful', 'Bonny', 'Bubbly', 'Calm', 'Charming', 'Cheerful', 'Cuddly', 'Dainty',
+    'Dancing', 'Darling', 'Delicate', 'Devoted', 'Dippy', 'Dizzy', 'Dopey', 'Elegant', 'Enchanted', 'Energetic',
+    'Excited', 'Fancy', 'Fearless', 'Feisty', 'Floppy', 'Friendly', 'Frisky', 'Funny', 'Fuzzy', 'Gallant',
+    'Giddy', 'Giggling', 'Glamorous', 'Glimmering', 'Glittery', 'Glorious', 'Golden', 'Graceful', 'Grand', 'Groovy',
+    'Handsome', 'Helpful', 'Honest', 'Hopeful', 'Huggable', 'Humble', 'Hungry', 'Innocent', 'Inspired', 'Intrepid',
+    'Joyful', 'Keen', 'Laughing', 'Lazy', 'Little', 'Loyal', 'Luminous', 'Merry', 'Mischievous', 'Modest',
+    'Musical', 'Neat', 'Nice', 'Noble', 'Optimistic', 'Peaceful', 'Perfect', 'Plucky', 'Polite', 'Positive',
+    'Precious', 'Pretty', 'Proud', 'Puffy', 'Quick', 'Relaxed', 'Rosy', 'Round', 'Royal', 'Rusty',
+    'Shiny', 'Shy', 'Singing', 'Sleepy', 'Smiling', 'Smooth', 'Snappy', 'Sneaky', 'Soft', 'Speedy',
+    'Spirited', 'Spunky', 'Starry', 'Stout', 'Sturdy', 'Sweet', 'Talented', 'Thankful', 'Thoughtful', 'Thrilled',
+    'Tidy', 'Timeless', 'Trusty', 'Truthful', 'Twinkly', 'Velvet', 'Victorious', 'Warm', 'Wild', 'Wise',
+    'Wonderful', 'Zany'
+];
+
+const nouns = [
+    // Original
+    'Panda', 'Unicorn', 'Kitten', 'Puppy', 'Fox', 'Badger', 'Sparrow', 'Dolphin', 'Otter', 'Rabbit',
+    'Hedgehog', 'Firefly', 'Dragon', 'Griffin', 'Phoenix', 'Pegasus', 'Squirrel', 'Beaver', 'Owl', 'Eagle',
+    'Tiger', 'Lion', 'Elephant', 'Monkey', 'Koala', 'Penguin', 'Seal', 'Whale', 'Shark', 'Octopus',
+    'Jellyfish', 'Butterfly', 'Ladybug', 'Caterpillar', 'Bee', 'Ant', 'Spider', 'Frog', 'Turtle', 'Lizard',
+    'Snake', 'Crocodile', 'Dinosaur', 'Robot', 'Alien', 'Ghost', 'Wizard', 'Sprite', 'Pixie', 'Gnome',
+    'Elf', 'Fairy',
+    // Added
+    'Alpaca', 'Angel', 'Axolotl', 'Baboon', 'Bear', 'Beetle', 'Bluebird', 'Bobcat', 'Bumblebee', 'Bunny',
+    'Camel', 'Canary', 'Capybara', 'Cardinal', 'Cheetah', 'Chihuahua', 'Chinchilla', 'Chipmunk', 'Clownfish', 'Cobra',
+    'Cockatoo', 'Comet', 'Cookie', 'Coral', 'Cougar', 'Cow', 'Coyote', 'Crab', 'Crane', 'Cricket',
+    'Cupcake', 'Deer', 'Diamond', 'Dingo', 'Donkey', 'Dove', 'Dragonfly', 'Duckling', 'Emu', 'Falcon',
+    'Ferret', 'Finch', 'Flamingo', 'Flower', 'Flounder', 'Gazelle', 'Gecko', 'Gem', 'Gerbil', 'Gibbon',
+    'Giraffe', 'Goat', 'Goldfish', 'Goose', 'Gopher', 'Gorilla', 'Grasshopper', 'Grouse', 'Guppy', 'Hamster',
+    'Hare', 'Hawk', 'Hippo', 'Hornet', 'Horse', 'Hummingbird', 'Hyena', 'Ibex', 'Iguana', 'Impala',
+    'Jackal', 'Jaguar', 'Jay', 'Kangaroo', 'Kingfisher', 'Kiwi', 'Lamb', 'Lark', 'Lemming', 'Lemur',
+    'Leopard', 'Llama', 'Lobster', 'Locust', 'Loris', 'Lynx', 'Macaw', 'Magpie', 'Manatee', 'Mantis',
+    'Marmot', 'Meerkat', 'Mermaid', 'Mockingbird', 'Mole', 'Mongoose', 'Moose', 'Mosquito', 'Moth', 'Mouse',
+    'Muffin', 'Narwhal', 'Newt', 'Nightingale', 'Nymph', 'Ocelot', 'Opossum', 'Orca', 'Ostrich', 'Panther',
+    'Papillon', 'Parakeet', 'Parrot', 'Partridge', 'Peacock', 'Pelican', 'Pheasant', 'Piglet', 'Pigeon', 'Pika',
+    'Platypus', 'Pony', 'Poodle', 'Porcupine', 'Possum', 'Puffin', 'Pug', 'Puma', 'Quail', 'Quokka',
+    'Raccoon', 'Ram', 'Rat', 'Raven', 'Reindeer', 'Rhino', 'Robin', 'Salamander', 'Salmon', 'Sandpiper',
+    'Sardine', 'Scorpion', 'Seagull', 'Seahorse', 'Serpent', 'Sheep', 'Shrew', 'Shrimp', 'Skunk', 'Sloth',
+    'Snail', 'Snowflake', 'Star', 'Starfish', 'Stingray', 'Stork', 'Sugarplum', 'Swallow', 'Swan', 'Tadpole',
+    'Tapir', 'Tarsier', 'Termite', 'Terrier', 'Thrush', 'Toad', 'Toucan', 'Trout', 'Turkey', 'Viper',
+    'Vole', 'Vulture', 'Wallaby', 'Walrus', 'Wasp', 'Weasel', 'Wombat', 'Woodpecker', 'Worm', 'Wren',
+    'Yak', 'Zebra'
+];
 
     function generateCuteName() {
         const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
         const noun = nouns[Math.floor(Math.random() * nouns.length)];
         // Add a small random number for extra uniqueness, though collisions are unlikely
         const num = Math.floor(Math.random() * 90) + 10; // 10-99
-        return `${adj}${noun}${num}`;
+        return `${adj} ${noun} ${num}`;
     }
 
     // --- Globals & DOM References ---
@@ -888,11 +938,9 @@ document.addEventListener('DOMContentLoaded', () => {
             li.innerHTML = `<strong>${data.name}</strong> <small>(${pid.substring(0, 6)}...)</small>`; // Use innerHTML to allow strong tag
 
             const disconnectBtn = document.createElement('button');
-            disconnectBtn.innerHTML = '<i class="bi bi-x-circle"></i> Disconnect'; // Use icon
+            disconnectBtn.innerHTML = '<i class="bi bi-x"></i> Disconnect'; // Use icon
             disconnectBtn.title = `Disconnect from ${data.name}`;
             disconnectBtn.style.marginLeft = '10px';
-            disconnectBtn.style.padding = '2px 5px'; // Make button smaller
-            disconnectBtn.style.fontSize = '0.8em';
             disconnectBtn.onclick = () => {
                 if (connections[pid]) {
                     console.log(`Manually disconnecting from ${data.name} (${pid})`);
@@ -933,6 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedFiles.forEach(file => {
             peersToSendTo.forEach(connData => { // connData is { conn, name }
                 const conn = connData.conn;
+                // We still need the peerName here for the *initial* UI label and potential metadata error message
                 const peerName = connData.name;
                 const peerId = conn.peer; // Still need ID for internal tracking
 
@@ -941,7 +990,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.warn(`Skipping send to ${peerName} (${peerId}), connection not open or invalid.`);
                     const failedLi = document.createElement('li');
                     failedLi.textContent = `Sending ${file.name} to ${peerName}: Failed (Connection Closed)`;
-                    failedLi.style.color = 'orange';
                     sendProgressList.appendChild(failedLi);
                     return; // Skip to next peer
                 }
@@ -950,9 +998,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const safeFileName = file.name.replace(/[^a-zA-Z0-9_-]/g, '-');
                 const progressId = `send-${peerId}-${safeFileName}`; // Use peerId for reliable ID
 
-                // Create progress UI element, using the PEER NAME for display
+                // Create progress UI element, using the PEER NAME for the initial display
                 const li = document.createElement('li');
                 li.id = progressId;
+                // Initial label uses the name known when starting the send
                 const label = document.createTextNode(`Sending ${file.name} to ${peerName}: `);
                 const progress = document.createElement('progress');
                 progress.max = file.size;
@@ -965,18 +1014,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     type: 'file-metadata',
                     fileName: file.name,
                     totalSize: file.size
-                    // No need to send sender name here, receiver knows from connection
                 };
                 console.log(`Sending metadata for ${file.name} to ${peerName} (${peerId})`);
                 try {
                     conn.send(metadata);
                     // --- Step 2: Start sending chunks ---
-                    sendFileChunked(file, conn, progress, li, peerName); // Pass peerName for logging
+                    // *** CHANGE HERE: Call without peerName parameter ***
+                    sendFileChunked(file, conn, progress, li);
 
                 } catch (error) {
+                     // Error message uses the peerName known at this point
                      console.error(`Error sending metadata for ${file.name} to ${peerName} (${peerId}):`, error);
                      li.textContent = `Sending ${file.name} to ${peerName}: Metadata Send Error`;
-                     li.style.color = 'red';
                      progress?.remove();
                 }
             });
@@ -984,22 +1033,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Clear file selection after initiating sends
         selectedFiles = [];
-        fileList.innerHTML = '<li>No files selected.</li>';
     });
 
     // Helper function to send a file in chunks
-    // Added peerName parameter for better logging/UI messages
-    function sendFileChunked(file, conn, progressBar, progressElement, peerName) {
+    // REMOVED peerName parameter
+    function sendFileChunked(file, conn, progressBar, progressElement) {
         const chunkSize = 64 * 1024; // 64KB
         let offset = 0;
         const peerId = conn.peer; // Capture peerId for checks
+        // Fetch the receiver's name directly from the connections object for messages
+        // This ensures we use the name associated with the peerId *now*.
+        const receiverName = connections[peerId]?.name || `Peer_${peerId.substring(0,4)}`; // Add fallback
 
         function readSlice() {
             // Check connection using peerId before reading/sending
+            // Use receiverName for messages
             if (!connections[peerId] || !connections[peerId].conn?.open) {
-                console.warn(`Connection to ${peerName} (${peerId}) lost during send of ${file.name}. Aborting send.`);
-                progressElement.textContent = `Sending ${file.name} to ${peerName}: Failed (Disconnected)`;
-                progressElement.style.color = 'orange';
+                console.warn(`Connection to ${receiverName} (${peerId}) lost during send of ${file.name}. Aborting send.`);
+                progressElement.textContent = `Sending ${file.name} to ${receiverName}: Failed (Disconnected)`;
                 progressBar?.remove();
                 return;
             }
@@ -1009,10 +1060,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             reader.onload = evt => {
                 // Double-check connection right before sending
+                // Use receiverName for messages
                 if (!connections[peerId] || !connections[peerId].conn?.open) {
-                   console.warn(`Connection to ${peerName} (${peerId}) lost just before sending chunk for ${file.name}. Aborting send.`);
-                   progressElement.textContent = `Sending ${file.name} to ${peerName}: Failed (Disconnected)`;
-                   progressElement.style.color = 'orange';
+                   console.warn(`Connection to ${receiverName} (${peerId}) lost just before sending chunk for ${file.name}. Aborting send.`);
+                   progressElement.textContent = `Sending ${file.name} to ${receiverName}: Failed (Disconnected)`;
                    progressBar?.remove();
                    return;
                 }
@@ -1034,15 +1085,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Use setTimeout for non-blocking loop
                         setTimeout(readSlice, 0);
                     } else {
-                        console.log(`Finished sending ${file.name} to ${peerName} (${peerId})`);
-                        progressElement.textContent = `Sent ${file.name} to ${peerName} (${formatBytes(file.size)})`;
-                        progressElement.style.color = 'green'; // Indicate success
+                        // *** CHANGE HERE ***
+                        // Fetch the name AGAIN right before displaying the final message
+                        // to ensure it's the most current one.
+                        const finalReceiverName = connections[peerId]?.name || receiverName; // Use earlier lookup as fallback
+                        console.log(`Finished sending ${file.name} to ${finalReceiverName} (${peerId})`);
+                        // *** USE finalReceiverName IN THE UI TEXT ***
+                        progressElement.textContent = `Sent ${file.name} to ${finalReceiverName} (${formatBytes(file.size)})`;
                         progressBar?.remove();
                     }
                 } catch (error) {
-                    console.error(`Error sending chunk for ${file.name} to ${peerName} (${peerId}):`, error);
-                    progressElement.textContent = `Sending ${file.name} to ${peerName}: Send Error`;
-                    progressElement.style.color = 'red';
+                    // Use receiverName for error messages
+                    console.error(`Error sending chunk for ${file.name} to ${receiverName} (${peerId}):`, error);
+                    progressElement.textContent = `Sending ${file.name} to ${receiverName}: Send Error`;
                     progressBar?.remove();
                     // Optionally close connection on send error
                     // if (connections[peerId]) connections[peerId].conn.close();
@@ -1050,10 +1105,10 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             reader.onerror = (err) => {
+                // Use receiverName for error messages
                 console.error(`FileReader error for ${file.name}:`, err);
                 displayPopup(`<i class='bi bi-info-circle-fill'></i> Error reading file ${file.name}. Cannot send.`);
-                progressElement.textContent = `Sending ${file.name} to ${peerName}: Read Error`;
-                progressElement.style.color = 'red';
+                progressElement.textContent = `Sending ${file.name} to ${receiverName}: Read Error`;
                 progressBar?.remove();
             };
 
@@ -1157,14 +1212,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     a.innerHTML = `<i class='bi bi-check-circle-fill'></i> ${data.fileName} (${formatBytes(transfer.totalSize)})`;
                     transfer.progressElement.innerHTML = ''; // Clear existing content
                     transfer.progressElement.append(a, document.createTextNode(` (from ${finalPeerName})`));
-                    transfer.progressElement.style.color = 'green'; // Style completed download
 
                     console.log(`Finished receiving ${data.fileName} from ${finalPeerName} (${peerId})`);
                 } else {
                     // Error: Received 'last chunk' flag but byte count doesn't match
                     console.error(`File transfer incomplete for ${data.fileName} from ${finalPeerName} (${peerId}). Expected ${transfer.totalSize} bytes, received ${transfer.receivedBytes}`);
                     transfer.progressElement.textContent = `Error receiving ${data.fileName} from ${finalPeerName} (Incomplete)`;
-                    transfer.progressElement.style.color = 'red';
                 }
                 // Clean up transfer state from memory
                 delete incomingTransfers[key];
@@ -1189,7 +1242,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const finalPeerName = transfer.peerName || nameToDisplay;
                 if (transfer.progressElement && !transfer.progressElement.querySelector('a')) { // Only update if not completed
                     transfer.progressElement.textContent = `Failed receiving ${fileName} from ${finalPeerName} (Disconnected)`;
-                    transfer.progressElement.style.color = 'orange';
                     transfer.progressElement.querySelector('progress')?.remove();
                 }
                 delete incomingTransfers[key];
@@ -1206,7 +1258,6 @@ document.addEventListener('DOMContentLoaded', () => {
                  if (item.querySelector('progress')) { // Only update if still in progress
                      const fileName = item.textContent.match(/Sending (.*?) to/)?.[1] || 'file';
                      item.textContent = `Sending ${fileName} to ${nameToDisplay}: Failed (Disconnected)`;
-                     item.style.color = 'orange';
                      item.querySelector('progress').remove();
                  }
             }
