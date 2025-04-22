@@ -643,8 +643,7 @@ const nouns = [
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = data.fileName;
-                    // Use checkmark icon for success
-                    a.innerHTML = `<i class='bi bi-check-circle-fill'></i> ${data.fileName} (${formatBytes(transfer.totalSize)})`;
+                    a.innerHTML = `${data.fileName} (${formatBytes(transfer.totalSize)})`;
                     transfer.progressElement.innerHTML = ''; // Clear existing content
                     transfer.progressElement.append(a, document.createTextNode(` (from ${finalPeerName})`));
 
@@ -666,6 +665,7 @@ const nouns = [
                     connections[peerId].name = data.name;
                     console.log(`Updating UI for peer ${peerId} with new name: ${data.name}`);
                     updatePeerList(); // Update the connected peers list display
+                    displayPopup(`<i class='bi bi-check-circle-fill'></i> Connected to ${data.name}`);
                     // Update any ongoing transfer UI elements for this peer
                     Object.values(incomingTransfers).forEach(transfer => {
                         if (transfer.peerName !== data.name && transfer.progressElement.textContent.includes(peerName)) {
