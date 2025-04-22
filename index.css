@@ -6,7 +6,7 @@
     --bg2: #e0e0e0;
     --text-color: #333;
     --border-radius: 10px;
-    --p1: 1em;
+    --p1: 0.5em;
 }
 *{
     box-sizing: border-box;

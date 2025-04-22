@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LocalShare - P2P File Sharing</title>
     <link rel="stylesheet" href="index.css">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -27,6 +28,10 @@
         <!-- Section for Connection Status and Peers -->
         <div class="section" id="connection-section">
             <h2>Connection Status</h2>
+            <div id="qr-code-container">
+                <p>Scan QR Code to connect:</p>
+                <canvas id="peer-id-qr-code"></canvas>
+              </div>
             <p id="status">Initializing...</p>
             <!-- You might list connected peers here -->
             <ul id="peer-list">
