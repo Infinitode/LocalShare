@@ -8,12 +8,12 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
 </head>
 <body>
+    <div id="popup"><i class="bi bi-info-circle-fill"></i> This is a popup...</div>
     <nav>
         <img src="/localshare-logo.png" alt="Logo">
         <h1>LocalShare</h1>
         <div class="s"></div>
-        <p>Send</p>
-        <p>Receive</p>
+        <a href="https://github.com/infinitode">Made with ❤️ by Infinitode</a>
     </nav>
         <div class="connections">
             <div>
@@ -38,10 +38,11 @@
                 <button id="send-button"><i class="bi bi-send"></i>Send Files</button>
                 <br>
                 <ul id="file-list">
+                    <li>No sent files...</li>
                     <!-- Selected files will be listed here by JavaScript -->
                 </ul>
             </div>
-            <div class="card" id="received-files">
+            <div class="card">
                 <ul id="received-files">
                     <li>No received files...</li>
                     <!-- Links to downloaded/received files will appear here -->

@@ -25,15 +25,20 @@
     color: inherit;
 }
 html,body{
-    background-color: var(--bg1);
     color: var(--t2);
     padding: var(--p1);
     font-weight: 500;
     font-family: 'Reddit Sans', sans-serif;
 }
+html{
+    background: url('/bg1.jpg') no-repeat center center / cover;
+}
 button{
     cursor: pointer;
     font-size: small;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--bg1);
     font-weight: 600;
     background-color: var(--primary-color);
@@ -41,6 +46,7 @@ button{
     border-radius: var(--border-radius);
     .bi{
         margin-right: calc(var(--p1) / 2);
+        font-size: large;
     }
 }
 input{
@@ -69,11 +75,15 @@ label{
     font-size: small;
     color: var(--bg1);
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background-color: var(--primary-color);
     padding: calc(var(--p1) / 2) var(--p2);
     border-radius: var(--border-radius);
     .bi{
         margin-right: calc(var(--p1) / 2);
+        font-size: large;
     }
 }
 nav{
@@ -100,9 +110,9 @@ nav{
         height: 30px;
         border-radius: var(--border-radius);
     }
-    p{
+    a{
         cursor: pointer;
-        font-size: small;
+        font-size: x-small;
         color: var(--t1);
         font-weight: 400;
     }
@@ -137,8 +147,10 @@ ul{
     li{
         display: flex;
         padding: 0 var(--p2);
-        cursor: pointer;
         font-size: small;
+        a{
+            color: var(--primary-color);
+        }
     }
     li:before{
         content: "-";
@@ -180,6 +192,29 @@ ul{
         font-size: small;
         color: var(--t1);
         font-weight: 400;
+    }
+}
+#popup{
+    position: fixed;
+    top: var(--p1);
+    left: var(--p1);
+    max-width: clamp(300px, 100%, 500px);
+    font-size: small;
+    color: var(--t1);
+    font-weight: 400;
+    background-color: var(--bg2);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--a1);
+    padding: var(--p1);
+    z-index: 10;
+    transition: transform 0.3s ease-in-out;
+    transform: translateY(-100vh);
+    &.show{
+        transform: translateY(0);
+    }
+    .bi{
+        margin-right: var(--p1);
+        color: var(--primary-color);
     }
 }
 #qr-code-container{

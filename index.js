@@ -1,6 +1,34 @@
 // index.js
 
 document.addEventListener('DOMContentLoaded', () => {
+    const popup = document.getElementById('popup');
+    let popupTimeoutId = null; // Variable to store the timeout ID
+
+    function displayPopup(content){
+        // 1. Clear any existing timeout
+        if (popupTimeoutId) {
+            clearTimeout(popupTimeoutId);
+            popupTimeoutId = null; // Reset the ID
+        }
+
+        // 2. Update content and show the popup
+        popup.innerHTML = content;
+        popup.classList.add('show');
+
+        // 3. Set a new timeout to hide the popup
+        popupTimeoutId = setTimeout(() => {
+            popup.classList.remove('show');
+            // Optional: Clear content after hiding animation completes
+            // You might want a slight delay if you have CSS transitions
+            setTimeout(() => {
+                if (!popup.classList.contains('show')) { // Check if it wasn't shown again quickly
+                   popup.innerHTML = '';
+                }
+            }, 500); // Adjust delay based on your CSS transition duration (if any)
+            popupTimeoutId = null; // Reset the ID after the timeout runs
+        }, 3000); // Hide after 3 seconds from the *last* call
+    }
+
     // --- Constants ---
     // DISCOVERY_ID removed
 
@@ -52,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alertMsg = `Error connecting to the PeerJS signaling server.`;
         }
 
-        if (alertMsg) alert(alertMsg);
+        if (alertMsg) displayPopup("<i class='bi bi-info-circle-fill'></i>" + alertMsg);
 
         // Reset manual connection UI elements
         const connectInput = document.getElementById('peer-id-input');
@@ -84,9 +112,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     connectButton.addEventListener('click', () => {
         const remoteId = connectInput.value.trim();
-        if (!remoteId) return alert('Please enter a peer ID.');
-        if (connections[remoteId]) return alert('Already connected to ' + remoteId);
-        if (remoteId === peer.id) return alert("You cannot connect to yourself.");
+        if (!remoteId) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Please enter a peer ID.');
+        if (connections[remoteId]) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Already connected to ' + remoteId);
+        if (remoteId === peer.id) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + "You cannot connect to yourself.");
 
         console.log(`Attempting to connect manually to ${remoteId}...`);
         connectButton.disabled = true;
@@ -96,10 +124,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         conn.on('error', (err) => {
             console.error(`Manual connection error with ${remoteId}:`, err);
-            alert(`Failed to connect to ${remoteId}. Error: ${err.type}`);
+            displayPopup("<i class='bi bi-info-circle-fill'></i>" + `Failed to connect to ${remoteId}. Error: ${err.type}`);
             if (connectInput.value === remoteId || connectButton.textContent === 'Connecting...') {
                  connectButton.disabled = false;
-                 connectButton.textContent = 'Connect';
+                 connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
             }
         });
         setupConnection(conn);
@@ -127,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const connectInput = document.getElementById('peer-id-input');
             if (connectButton && connectInput.value === remotePeerId) {
                  connectButton.disabled = false;
-                 connectButton.textContent = 'Connect';
+                 connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
                  connectInput.value = '';
             }
         });
@@ -170,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 1500);
         }, (err) => {
             console.error('Failed to copy ID: ', err);
-            alert('Failed to copy ID.');
+            displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'Failed to copy ID.');
         });
     }
 
@@ -182,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (typeof QRCode === 'undefined') {
             console.error("QRCode library is not loaded. Cannot generate QR code.");
-            qrCodeContainer.innerHTML = '<p style="color: red;">Error: QR Code library not loaded.</p>';
+            qrCodeContainer.innerHTML = '<p>Error: QR Code library not loaded.</p>';
             qrCodeContainer.style.display = 'block';
             return;
         }
@@ -202,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
          }, (error) => {
             if (error) {
                 console.error("QR Code generation failed:", error);
-                qrCodeContainer.innerHTML = '<p style="color: red;">Error generating QR code.</p>';
+                qrCodeContainer.innerHTML = '<p>Error generating QR code.</p>';
                 // Ensure container is visible even on error to show the message
                 qrCodeContainer.style.display = 'block';
             } else {
@@ -235,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         peerList.innerHTML = '';
         if (!connectedPeerIds.length) {
             peerList.innerHTML = '<li>No active data connections.</li>';
-            peerList.innerHTML += '<li style="color: grey;">Share your QR code or ID, or connect manually.</li>';
+            peerList.innerHTML += '<li>Share your QR code or ID, or connect manually.</li>';
             return;
         }
 
@@ -275,9 +303,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Send Files with Progress ---
     sendButton.addEventListener('click', () => {
-        if (!selectedFiles.length) return alert('No files selected.');
+        if (!selectedFiles.length) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'No files selected.');
         const peersToSendTo = Object.values(connections);
-        if (!peersToSendTo.length) return alert('No peers connected for sending files.');
+        if (!peersToSendTo.length) return displayPopup("<i class='bi bi-info-circle-fill'></i>" + 'No peers connected for sending files.');
 
         sendProgressList.innerHTML = ''; // Clear previous send progress UI
 
@@ -288,7 +316,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.warn(`Skipping send to ${conn.peer}, connection not open or invalid.`);
                     const failedLi = document.createElement('li');
                     failedLi.textContent = `Sending ${file.name} to ${conn.peer}: Failed (Connection Closed)`;
-                    failedLi.style.color = 'red';
                     sendProgressList.appendChild(failedLi);
                     return; // Skip to next peer
                 }
@@ -348,7 +375,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!connections[peerId] || !connections[peerId].open) {
                 console.warn(`Connection to ${peerId} lost during send of ${file.name}. Aborting send.`);
                 progressElement.textContent = `Sending ${file.name} to ${peerId}: Failed (Disconnected)`;
-                progressElement.style.color = 'red';
                 progressBar?.remove();
                 return;
             }
@@ -360,7 +386,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!connections[peerId] || !connections[peerId].open) {
                    console.warn(`Connection to ${peerId} lost just before sending chunk for ${file.name}. Aborting send.`);
                    progressElement.textContent = `Sending ${file.name} to ${peerId}: Failed (Disconnected)`;
-                   progressElement.style.color = 'red';
                    progressBar?.remove();
                    return;
                 }
@@ -385,13 +410,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         console.log(`Finished sending ${file.name} to ${peerId}`);
                         progressElement.textContent = `Sent ${file.name} to ${peerId} (${formatBytes(file.size)})`;
-                        progressElement.style.color = 'green';
                         progressBar?.remove();
                     }
                 } catch (error) {
                     console.error(`Error sending chunk for ${file.name} to ${peerId}:`, error);
                     progressElement.textContent = `Sending ${file.name} to ${peerId}: Error`;
-                    progressElement.style.color = 'red';
                     progressBar?.remove();
                     if (connections[peerId]) connections[peerId].close();
                 }
@@ -399,9 +422,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             reader.onerror = (err) => {
                 console.error(`FileReader error for ${file.name}:`, err);
-                alert(`Error reading file ${file.name}. Cannot send.`);
+                displayPopup("<i class='bi bi-info-circle-fill'></i>" + `Error reading file ${file.name}. Cannot send.`);
                 progressElement.textContent = `Sending ${file.name} to ${peerId}: Read Error`;
-                progressElement.style.color = 'red';
                 progressBar?.remove();
             };
 
@@ -463,7 +485,6 @@ document.addEventListener('DOMContentLoaded', () => {
                  const existingLi = document.getElementById(`receive-${sanitizedKey}`);
                  if (existingLi && !existingLi.querySelector('a')) { // If it's still showing progress/error
                      existingLi.textContent = `Error receiving ${data.fileName} from ${conn.peer} (Missing Metadata)`;
-                     existingLi.style.color = 'red';
                  }
                 return; // Cannot process chunk without knowing total size etc.
             }
@@ -506,7 +527,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Error: Received 'last chunk' flag but byte count doesn't match
                     console.error(`File transfer incomplete for ${data.fileName} from ${conn.peer}. Expected ${transfer.totalSize} bytes, received ${transfer.receivedBytes}`);
                     transfer.progressElement.textContent = `Error receiving ${data.fileName} from ${conn.peer} (Incomplete)`;
-                    transfer.progressElement.style.color = 'red';
                 }
                 // Clean up transfer state from memory
                 delete incomingTransfers[key];
@@ -525,7 +545,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const transfer = incomingTransfers[key];
                 if (transfer.progressElement && !transfer.progressElement.querySelector('a')) {
                     transfer.progressElement.textContent = `Failed receiving ${key.split(':')[1]} from ${peerId} (Disconnected)`;
-                    transfer.progressElement.style.color = 'red';
                 }
                 delete incomingTransfers[key];
                 console.log(`Cleaned up incomplete incoming transfer ${key}`);
@@ -538,7 +557,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (parts.length >= 3 && parts[0] === 'send' && parts[1] === peerId) {
                  if (item.querySelector('progress')) {
                      item.textContent += " - Failed (Disconnected)";
-                     item.style.color = 'red';
                      item.querySelector('progress').remove();
                  }
             }
