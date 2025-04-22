@@ -8,49 +8,47 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
 </head>
 <body>
-
-    <div class="container">
+    <nav>
+        <img src="/localshare-logo.png" alt="Logo">
         <h1>LocalShare</h1>
-        <p>Share files directly with others on your local network.</p>
-        <br>
-        <!-- Section for Selecting and Sending Files -->
-        <div class="section" id="send-section">
-            <h2>Send Files</h2>
-            <input type="file" id="file-input" multiple>
-            <label for="file-input" class="file-label">Choose Files</label>
-            <button id="send-button">Send Selected Files</button>
-            <br>
-            <ul id="file-list">
-                <!-- Selected files will be listed here by JavaScript -->
-            </ul>
-        </div>
-
-        <!-- Section for Connection Status and Peers -->
-        <div class="section" id="connection-section">
-            <h2>Connection Status</h2>
+        <div class="s"></div>
+        <p>Send</p>
+        <p>Receive</p>
+    </nav>
+        <div class="connections">
+            <div>
+                <p>Scan the QR Code</p>
             <div id="qr-code-container">
-                <p>Scan QR Code to connect:</p>
                 <canvas id="peer-id-qr-code"></canvas>
               </div>
-            <p id="status">Initializing...</p>
-            <!-- You might list connected peers here -->
-            <ul id="peer-list">
-                <!-- Connected peers could be listed here -->
-            </ul>
+            </div>
         </div>
-
-        <!-- Section for Received Files -->
-        <div class="section" id="receive-section">
-            <h2>Received Files</h2>
-            <ul id="received-files">
-                <li>No received files...</li>
-                <!-- Links to downloaded/received files will appear here -->
-                <!-- Example: <li><a href="#" download="filename.txt">filename.txt</a> (Received from PeerX)</li> -->
-            </ul>
+        <div class="auto-grid">
+            <div class="card">
+                <p id="status">Initializing...</p>
+                <ul id="peer-list">
+                    <!-- Connected peers could be listed here -->
+                </ul>
+            </div>
+            <div class="card" id="connection-section">
+            </div>
+            <div class="card" id="send-section">
+                <input type="file" id="file-input" multiple>
+                <label for="file-input" class="file-label"><i class="bi bi-upload"></i>Choose Files</label>
+                <button id="send-button"><i class="bi bi-send"></i>Send Files</button>
+                <br>
+                <ul id="file-list">
+                    <!-- Selected files will be listed here by JavaScript -->
+                </ul>
+            </div>
+            <div class="card" id="received-files">
+                <ul id="received-files">
+                    <li>No received files...</li>
+                    <!-- Links to downloaded/received files will appear here -->
+                    <!-- Example: <li><a href="#" download="filename.txt">filename.txt</a> (Received from PeerX)</li> -->
+                </ul>
+            </div>
         </div>
-
-    </div> <!-- /container -->
-
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script src="index.js"></script>
 

@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Peer Setup ---
     peer.on('open', id => {
         console.log(`PeerJS initialized. Your ID: ${id}`);
-        status.innerHTML = `Your ID: <code>${id}</code> <button id="copy-id">Copy ID</button>`;
+        status.innerHTML = `Your ID: <code>${id}</code><button id="copy-id"><i class='bi bi-copy'></i> Copy ID</button>`;
         document.getElementById('copy-id')?.addEventListener('click', () => copyPeerId(id));
         displayQrCode(id);
         updatePeerList();
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (connectInput) connectInput.value = '';
         if (connectButton && connectButton.textContent === 'Connecting...') {
             connectButton.disabled = false;
-            connectButton.textContent = 'Connect';
+            connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
         }
         updatePeerList();
     });
@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     connectInput.placeholder = 'Enter peer ID manually…';
     connectInput.style.marginRight = '8px';
     connectButton.id = 'connect-button';
-    connectButton.textContent = 'Connect';
+    connectButton.innerHTML = '<i class="bi bi-wifi"></i> Connect';
     document.getElementById('connection-section').append(connectInput, connectButton);
 
     connectButton.addEventListener('click', () => {
@@ -187,12 +187,26 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        QRCode.toCanvas(qrCodeCanvas, id, { width: 160, margin: 1 }, (error) => {
+        // --- Define your desired colors ---
+        const qrCodeColors = {
+            dark: "#2fd366", // Example: Dark blue for the modules
+            light: "#0000"  // Example: Light grey for the background
+            // light: "#0000" // Use this for a transparent background (RGBA format)
+        };
+
+        // --- Pass the colors in the options ---
+        QRCode.toCanvas(qrCodeCanvas, id, {
+            width: 160,
+            margin: 1,
+            color: qrCodeColors // Add the color option here
+         }, (error) => {
             if (error) {
                 console.error("QR Code generation failed:", error);
                 qrCodeContainer.innerHTML = '<p style="color: red;">Error generating QR code.</p>';
+                // Ensure container is visible even on error to show the message
+                qrCodeContainer.style.display = 'block';
             } else {
-                console.log('QR Code generated successfully.');
+                console.log('QR Code generated successfully with custom colors.');
                 qrCodeContainer.style.display = 'block';
             }
         });
@@ -201,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updatePeerList() {
         let statusContent = '';
         if (peer.id) {
-            statusContent = `Your ID: <code>${peer.id}</code> <button id="copy-id">Copy ID</button>`;
+            statusContent = `Your ID: <code>${peer.id}</code> <button id="copy-id"><i class='bi bi-copy'></i> Copy ID</button>`;
         } else {
             statusContent = 'Initializing Peer...';
         }
