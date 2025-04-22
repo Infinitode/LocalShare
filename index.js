@@ -221,9 +221,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const connectedPeerIds = Object.keys(connections);
-        if (connectedPeerIds.length > 0) {
-            statusContent += ` | Connected to: ${connectedPeerIds.join(', ')}`;
-        }
+        // if (connectedPeerIds.length > 0) {
+        //     statusContent += ` | Connected to: ${connectedPeerIds.join(', ')}`;
+        // }
         status.innerHTML = statusContent;
 
         const copyBtn = document.getElementById('copy-id');
