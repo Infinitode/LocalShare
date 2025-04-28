@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LocalShare - P2P File Sharing</title>
+    <title>LocalShare | P2P File Sharing</title>
     <link rel="stylesheet" href="index.css">
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
 </head>
+
 <body>
     <div id="popup"><i class="bi bi-info-circle-fill"></i> This is a popup...</div>
     <nav>
@@ -15,41 +17,41 @@
         <div class="s"></div>
         <a href="https://github.com/infinitode">Made with ❤️ by Infinitode</a>
     </nav>
-        <div class="connections">
-            <div>
-                <p>Scan the QR Code</p>
+    <div class="connections">
+        <div>
+            <p>Scan the QR Code</p>
             <div id="qr-code-container">
                 <canvas id="peer-id-qr-code"></canvas>
-              </div>
             </div>
         </div>
-        <div class="auto-grid">
-            <div class="card">
-                <p id="status">Initializing...</p>
-                <ul id="peer-list">
-                    <!-- Connected peers could be listed here -->
-                </ul>
-            </div>
-            <div class="card" id="connection-section">
-                <h2>Connections</h2>
-            </div>
-            <div class="card" id="send-section">
-                <input type="file" id="file-input" multiple>
-                <label for="file-input" class="file-label"><i class="bi bi-upload"></i>Choose Files</label>
-                <button id="send-button"><i class="bi bi-send"></i>Send Files</button>
-                <ul id="file-list">
-                    <!-- Selected files will be listed here by JavaScript -->
-                </ul>
-            </div>
-            <div class="card">
-                <ul id="received-files">
-                    <!-- Links to downloaded/received files will appear here -->
-                    <!-- Example: <li><a href="#" download="filename.txt">filename.txt</a> (Received from PeerX)</li> -->
-                </ul>
-            </div>
+    </div>
+    <div class="auto-grid">
+        <div class="card">
+            <p id="status">Initializing...</p>
+            <ul id="peer-list">
+                <!-- Connected peers could be listed here -->
+            </ul>
         </div>
+        <div class="card" id="connection-section">
+            <h2>Connections</h2>
+        </div>
+        <div class="card" id="send-section">
+            <input type="file" id="file-input" multiple>
+            <label for="file-input" class="file-label"><i class="bi bi-upload"></i>Choose Files</label>
+            <button id="send-button"><i class="bi bi-send"></i>Send Files</button>
+            <ul id="file-list">
+                <!-- Selected files will be listed here by JavaScript -->
+            </ul>
+        </div>
+        <div class="card">
+            <ul id="received-files">
+                <!-- Links to downloaded/received files will appear here -->
+                <!-- Example: <li><a href="#" download="filename.txt">filename.txt</a> (Received from PeerX)</li> -->
+            </ul>
+        </div>
+    </div>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-<script src="index.js"></script>
-
+    <script src="index.js"></script>
 </body>
+
 </html>
