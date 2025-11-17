@@ -1,5 +1,38 @@
 document.addEventListener("DOMContentLoaded", () => {
   const popup = document.getElementById("popup");
+  const themeToggleButton = document.getElementById("theme-toggle");
+  const themeIcon = themeToggleButton.querySelector("i");
+
+  // --- Theme Control ---
+  const applyTheme = (theme) => {
+    if (theme === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+      themeIcon.classList.remove("bi-sun-fill");
+      themeIcon.classList.add("bi-moon-fill");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.setAttribute("data-theme", "light");
+      themeIcon.classList.remove("bi-moon-fill");
+      themeIcon.classList.add("bi-sun-fill");
+      localStorage.setItem("theme", "light");
+    }
+  };
+
+  themeToggleButton.addEventListener("click", () => {
+    const currentTheme =
+      document.documentElement.getAttribute("data-theme") || "light";
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    applyTheme(newTheme);
+  });
+
+  // Apply saved theme on initial load
+  const savedTheme =
+    localStorage.getItem("theme") ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light");
+  applyTheme(savedTheme);
+
   let popupTimeoutId = null; // Variable to store the timeout ID
 
   function displayPopup(content) {
@@ -739,7 +772,7 @@ document.addEventListener("DOMContentLoaded", () => {
       qrCodeContainer.style.display = "block";
       return;
     }
-    const qrCodeColors = { dark: "#2fd366", light: "#0000" };
+    const qrCodeColors = { dark: "#4400ff", light: "#0000" };
     QRCode.toCanvas(
       qrCodeCanvas,
       id,

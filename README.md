@@ -2,6 +2,10 @@
 
 LocalShare is a peer-to-peer file-sharing web app that was built entirely with vanilla HTML, CSS, and JS.
 
+## Latest Changes
+- Improved UI with dark mode and light mode.
+- Subtle UI animations.
+
 ## Getting Started
 
 You can clone LocalShare using Git.

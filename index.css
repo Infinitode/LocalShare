@@ -2,15 +2,26 @@
 @import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css");
 
 :root {
-    --primary-color: #2fd366;
-    --bg1: #040408;
-    --bg2: #0e0e0e;
-    --t1: #f7fffa;
-    --t2: #6a726d;
-    --border-radius: 30px;
-    --a1: rgba(164, 185, 167, 0.175);
+    /* Dark theme variables */
+    --primary-color: #4400ff; /* Primary color */
+    --bg1: #040408; /* Main background color */
+    --bg2: #0e0e0e; /* Secondary background color */
+    --t1: #f7fffa; /* Main text color */
+    --t2: #6a726d; /* Secondary text color */
+    --border-radius: 10px;
+    --a1: rgba(164, 185, 167, 0.175); /* Subtle border color */
     --p1: 1em;
     --p2: 2em;
+}
+
+/* Light theme variables */
+[data-theme="light"] {
+    --primary-color: #4400ff; /* Primary color */
+    --bg1: #f0f2f5; /* Main background color */
+    --bg2: #ffffff; /* Secondary background color */
+    --t1: #1c1e21; /* Main text color */
+    --t2: #65676b; /* Secondary text color */
+    --a1: #e6e6e6; /* Subtle border color */
 }
 
 * {
@@ -24,19 +35,16 @@
     outline: none;
     background-color: unset;
     color: inherit;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 html,
 body {
     color: var(--t2);
+    background-color: var(--bg1);
     padding: var(--p1);
     font-weight: 500;
     font-family: 'Reddit Sans', sans-serif;
-}
-
-html {
-    background-color: var(--bg1);
-    background: url('/bg1.jpg') no-repeat center center / cover;
 }
 
 button {
@@ -45,23 +53,30 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--bg1);
+    color: var(--t1);
     font-weight: 600;
     background-color: var(--primary-color);
     padding: calc(var(--p1) / 2) var(--p2);
     border-radius: var(--border-radius);
-
+    transition: background-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
     .bi {
         margin-right: calc(var(--p1) / 2);
         font-size: large;
     }
-}
 
+}
+[data-theme="light"] button{
+    color: var(--bg1);
+}
+button:hover {
+    transform: scale(1.05);
+    background-color: var(--primary-color);
+}
 code {
     font-family: monospace;
 }
 
-h2{
+h2 {
     font-size: medium;
     color: var(--t1);
     font-weight: 600;
@@ -92,10 +107,14 @@ input[type="file"] {
     display: none;
 }
 
+[data-theme="light"] label {
+    color: var(--bg1);
+}
+
 label {
     cursor: pointer;
     font-size: small;
-    color: var(--bg1);
+    color: var(--t1);
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -103,6 +122,7 @@ label {
     background-color: var(--primary-color);
     padding: calc(var(--p1) / 2) var(--p2);
     border-radius: var(--border-radius);
+    transition: background-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
 
     .bi {
         margin-right: calc(var(--p1) / 2);
@@ -110,12 +130,16 @@ label {
     }
 }
 
+label:hover {
+    transform: scale(1.05);
+    background-color: var(--primary-color);
+}
 nav {
     position: fixed;
     left: var(--p1);
     right: var(--p1);
     z-index: 9;
-    background-color: var(--bg1);
+    background-color: var(--bg2);
     display: flex;
     justify-content: center;
     gap: var(--p1);
@@ -125,7 +149,9 @@ nav {
     padding: var(--p1);
     border-radius: var(--border-radius);
     border: 1px solid var(--a1);
-
+    button .bi{
+        margin: 0;
+    }
     h1 {
         font-size: medium;
         color: var(--t1);
@@ -143,13 +169,18 @@ nav {
         color: var(--t1);
         font-weight: 400;
     }
-    a:hover{
+
+    a:hover {
         text-decoration: underline;
     }
 
     .s {
         flex-grow: 1;
     }
+}
+
+[data-theme="light"] nav img{
+        filter: invert(1);
 }
 
 progress {
@@ -201,7 +232,8 @@ ul {
             color: var(--primary-color);
             text-decoration: none;
         }
-        a:hover{
+
+        a:hover {
             text-decoration: underline;
         }
     }
@@ -216,6 +248,7 @@ ul {
         vertical-align: middle;
         line-height: 1;
     }
+
 }
 
 .auto-grid {
@@ -293,4 +326,10 @@ ul {
 
 #status button{
     margin-top: var(--p1);
+}
+
+ul li:hover {
+    background-color: rgba(164, 185, 167, 0.3); /* Slightly darker on hover */
+    transform: scale(1.02);
+    transition: background-color 0.3s ease, transform 0.2s ease;
 }
