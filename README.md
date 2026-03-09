@@ -4,9 +4,11 @@ LocalShare is a peer-to-peer file-sharing web app that was built entirely with v
 
 ## Latest Changes
 
-- Automatic discovery of nearby local devices (based on local IP addresses).
-- Better UI.
-- Subtle animations.
+- Automatic nearby discovery using IPify-based room grouping and in-browser room host registry.
+- Connection acceptance now reflects on both devices reliably.
+- Richer transfer details (percent + bytes).
+- Built-in room chat with sender names.
+- Updated UI with stronger secondary color accents.
 
 ## Getting Started
 
@@ -25,10 +27,12 @@ _Live demo:_
 
 ## Features
 
-- **Peer to peer file sharing**: LocalShare shares files directly between devices on the same network.
-- **No server required**: No need for a central server, making it easy to use and set up.
-- **Simple UI**: Easy to use interface.
-- **Open Source**: The project is open source, allowing for community contributions and transparency.
+- **Peer to peer file sharing**: Files transfer directly between devices.
+- **Local room discovery**: Devices in the same IPify-derived room discover each other automatically.
+- **Direct connect fallback**: Devices outside the room can still connect via Peer ID.
+- **Connection handshake**: Incoming connections require accept/reject confirmation.
+- **Room chat**: Lightweight chat for connected peers.
+- **Detailed transfer status**: Progress bars include percentage and byte counters.
 
 ## Contributing
 

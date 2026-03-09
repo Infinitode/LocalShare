@@ -122,6 +122,24 @@
                     <ul id="received-files" class="space-y-4"></ul>
                 </div>
             </section>
+
+            <section id="chat-section" class="panel bg-white/5 border border-white/5 rounded-3xl p-6 backdrop-blur-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-semibold tracking-wider text-text/40 uppercase">Room Chat</h2>
+                    <span id="chat-presence" class="text-[10px] bg-secondary/20 text-secondary px-2 py-0.5 rounded-full">Offline</span>
+                </div>
+                <ul id="chat-messages" class="max-h-[180px] overflow-y-auto space-y-2 pr-2 scrollbar-thin">
+                    <li class="text-[11px] text-text/40 text-center py-4 italic border border-dashed border-white/10 rounded-xl">
+                        Chat messages will appear here
+                    </li>
+                </ul>
+                <div class="mt-4 flex gap-2">
+                    <input id="chat-input" type="text" maxlength="300" placeholder="Type a message..." class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-secondary/60 outline-none w-full transition-all text-text">
+                    <button id="chat-send" class="bg-secondary hover:bg-secondary/80 text-text px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap shadow-lg">
+                        <i class="bi bi-chat-dots-fill"></i> Send
+                    </button>
+                </div>
+            </section>
         </div>
     </main>
 

@@ -26,6 +26,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const handshakeMessage = document.getElementById("handshake-message");
     const handshakeAccept = document.getElementById("handshake-accept");
     const handshakeReject = document.getElementById("handshake-reject");
+    const chatMessages = document.getElementById("chat-messages");
+    const chatInput = document.getElementById("chat-input");
+    const chatSend = document.getElementById("chat-send");
+    const chatPresence = document.getElementById("chat-presence");
 
     // --- State ---
     const adjectives = ["Sparkly", "Fluffy", "Happy", "Brave", "Clever", "Witty", "Sunny", "Cozy", "Gentle", "Lucky"];
@@ -90,6 +94,32 @@ document.addEventListener("DOMContentLoaded", () => {
             const fallback = (window.location.host || "local").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
             return `local-${fallback.slice(0, 12) || "default"}`;
         }
+    }
+
+    function updateChatPresence() {
+        const count = Object.keys(connections).length;
+        if (count > 0) {
+            chatPresence.textContent = `${count} Online`;
+            chatPresence.className = "text-[10px] bg-secondary/20 text-secondary px-2 py-0.5 rounded-full";
+        } else {
+            chatPresence.textContent = "Offline";
+            chatPresence.className = "text-[10px] bg-white/10 text-text/40 px-2 py-0.5 rounded-full";
+        }
+    }
+
+    function appendChatMessage(sender, text, isLocal = false) {
+        if (!text) return;
+        if (chatMessages.children.length === 1 && chatMessages.children[0].textContent.includes("Chat messages will appear here")) {
+            chatMessages.innerHTML = "";
+        }
+        const li = document.createElement("li");
+        li.className = `p-2 rounded-xl border ${isLocal ? "border-secondary/40 bg-secondary/10" : "border-white/10 bg-white/5"}`;
+        li.innerHTML = `
+            <p class="text-[10px] ${isLocal ? "text-secondary" : "text-text/50"} font-bold">${sender}</p>
+            <p class="text-xs text-text/90 break-words">${text}</p>
+        `;
+        chatMessages.appendChild(li);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     async function initDiscovery() {
@@ -180,18 +210,29 @@ document.addEventListener("DOMContentLoaded", () => {
     function setupConnection(conn, name) {
         const pid = conn.peer;
         connections[pid] = { conn, name, status: 'active' };
-        
-        conn.on("open", () => {
+        let didConnectOnce = false;
+
+        const onConnected = () => {
+            if (didConnectOnce) return;
+            didConnectOnce = true;
             displayPopup(`Connected to ${name}`);
             updatePeerListUi();
-        });
+            updateChatPresence();
+            conn.send({ type: 'peer-name', name: localPeerName });
+            if (isRoomHost) publishRoster();
+        };
+
+        conn.on("open", onConnected);
+        if (conn.open) onConnected();
 
         conn.on("data", (data) => {
             if (data.type === 'file-metadata') handleFileMetadata(data, pid);
             if (data.type === 'file-chunk') handleFileChunk(data, pid);
+            if (data.type === 'chat-message') appendChatMessage(data.from || connections[pid]?.name || "Peer", data.message || "");
             if (data.type === 'peer-name') {
                 connections[pid].name = data.name;
                 updatePeerListUi();
+                updateChatPresence();
             }
         });
 
@@ -199,6 +240,8 @@ document.addEventListener("DOMContentLoaded", () => {
             delete connections[pid];
             displayPopup(`${name} disconnected`);
             updatePeerListUi();
+            updateChatPresence();
+            if (isRoomHost) publishRoster();
         });
     }
 
@@ -225,6 +268,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
     connectButton.addEventListener("click", () => {
         requestConnection(peerIdInput.value.trim());
+    });
+
+    function sendChatMessage() {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        const peers = Object.values(connections);
+        if (!peers.length) {
+            displayPopup("Connect to a peer first!");
+            return;
+        }
+        peers.forEach(({ conn }) => {
+            if (conn.open) {
+                conn.send({ type: "chat-message", from: localPeerName, message: text });
+            }
+        });
+        appendChatMessage(localPeerName, text, true);
+        chatInput.value = "";
+    }
+
+    chatSend.addEventListener("click", sendChatMessage);
+    chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendChatMessage();
     });
 
     // --- UI Updates ---
@@ -520,6 +585,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="track h-1.5 w-full rounded-full overflow-hidden">
                 <div id="${transferId}-bar" class="h-full bg-primary w-0 transition-all duration-300"></div>
             </div>
+            <div id="${transferId}-meta" class="text-[10px] text-text/50">0% • 0 / ${formatBytes(file.size)}</div>
         `;
         sendProgressList.appendChild(li);
         updateTransferVisibility();
@@ -549,6 +615,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 offset += slice.size;
                 const pct = (offset / file.size) * 100;
                 document.getElementById(`${transferId}-bar`).style.width = `${pct}%`;
+                const meta = document.getElementById(`${transferId}-meta`);
+                if (meta) meta.textContent = `${Math.round(pct)}% • ${formatBytes(offset)} / ${formatBytes(file.size)}`;
                 
                 // Controlled recursion to avoid blocking
                 setTimeout(sendChunk, 10);
@@ -577,6 +645,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="track h-1.5 w-full rounded-full overflow-hidden">
                 <div id="${transferId}-bar" class="h-full bg-accent w-0 transition-all duration-300"></div>
             </div>
+            <div id="${transferId}-meta" class="text-[10px] text-text/50">0% • 0 / ${formatBytes(data.totalSize)}</div>
         `;
         receivedFiles.appendChild(li);
         updateTransferVisibility();
@@ -601,6 +670,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const transferId = `recv-${peerId}-${data.fileName.replace(/\s+/g, '-')}`;
         const bar = document.getElementById(`${transferId}-bar`);
         if (bar) bar.style.width = `${pct}%`;
+        const meta = document.getElementById(`${transferId}-meta`);
+        if (meta) meta.textContent = `${Math.round(pct)}% • ${formatBytes(transfer.receivedBytes)} / ${formatBytes(transfer.totalSize)}`;
 
         if (data.isLast) {
             const blob = new Blob(transfer.buffer);
@@ -623,5 +694,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Kickoff ---
+    updateChatPresence();
     initDiscovery();
 });
