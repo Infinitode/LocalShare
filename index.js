@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let registryConn = null;
     let registryReconnectTimer = null;
     const roomPeers = {};
+    const roomPeerConns = {};
 
     // --- Theme Removed (Dark Mode Only) ---
 
@@ -211,6 +212,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const pid = conn.peer;
         connections[pid] = { conn, name, status: 'active' };
         let didConnectOnce = false;
+        let didDisconnectOnce = false;
+
+        const removeConnection = (reasonText) => {
+            if (didDisconnectOnce) return;
+            didDisconnectOnce = true;
+            if (connections[pid]) delete connections[pid];
+            if (reasonText) displayPopup(reasonText);
+            updatePeerListUi();
+            updateChatPresence();
+            if (isRoomHost) publishRoster();
+        };
 
         const onConnected = () => {
             if (didConnectOnce) return;
@@ -229,6 +241,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (data.type === 'file-metadata') handleFileMetadata(data, pid);
             if (data.type === 'file-chunk') handleFileChunk(data, pid);
             if (data.type === 'chat-message') appendChatMessage(data.from || connections[pid]?.name || "Peer", data.message || "");
+            if (data.type === 'disconnect-notice') {
+                removeConnection(`${name} disconnected`);
+                try { conn.close(); } catch (_e) {}
+            }
             if (data.type === 'peer-name') {
                 connections[pid].name = data.name;
                 updatePeerListUi();
@@ -237,11 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         conn.on("close", () => {
-            delete connections[pid];
-            displayPopup(`${name} disconnected`);
-            updatePeerListUi();
-            updateChatPresence();
-            if (isRoomHost) publishRoster();
+            removeConnection(`${name} disconnected`);
         });
     }
 
@@ -308,7 +320,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <p class="peer-id text-[10px] text-text/40">${id}</p>
                     </div>
                 </div>
-                <button class="text-text/40 hover-secondary p-2 rounded-lg hover-secondary-bg transition-all opacity-0 group-hover:opacity-100" onclick="window.disconnectPeer('${id}')">
+                <button class="text-text/40 hover-secondary p-2 rounded-lg hover-secondary-bg transition-all" onclick="window.disconnectPeer('${id}')">
                     <i class="bi bi-x-lg"></i>
                 </button>
             `;
@@ -323,7 +335,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     window.disconnectPeer = (id) => {
-        if (connections[id]) connections[id].conn.close();
+        if (!connections[id]) return;
+        const target = connections[id].conn;
+        try {
+            if (target.open) {
+                target.send({ type: "disconnect-notice" });
+            }
+        } catch (_e) {}
+        try { target.close(); } catch (_e) {}
+        delete connections[id];
+        updatePeerListUi();
+        updateChatPresence();
+        if (isRoomHost) publishRoster();
     };
 
     function renderNearbyPeers(peers) {
@@ -378,6 +401,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function removeRoomPeer(peerId) {
         delete roomPeers[peerId];
+        delete roomPeerConns[peerId];
+    }
+
+    function getSanitizedRoster() {
+        return Object.values(roomPeers).map(({ peerId, name, ts }) => ({ peerId, name, ts }));
     }
 
     function publishRoster() {
@@ -387,13 +415,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 removeRoomPeer(entry.peerId);
             }
         });
-        const roster = Object.values(roomPeers);
+        const roster = getSanitizedRoster();
         renderNearbyPeers(roster.filter((p) => p.peerId !== peer?.id));
         if (!isRoomHost) return;
-        Object.values(roomPeers).forEach((entry) => {
-            const targetConn = entry._conn;
+        Object.entries(roomPeerConns).forEach(([peerId, targetConn]) => {
             if (targetConn && targetConn.open) {
                 targetConn.send({ type: "registry-roster", peers: roster });
+            } else if (!targetConn || !targetConn.open) {
+                delete roomPeerConns[peerId];
             }
         });
     }
@@ -421,12 +450,14 @@ document.addEventListener("DOMContentLoaded", () => {
         roomHostPeer.on("connection", (conn) => {
             conn.on("data", (data) => {
                 if (data.type !== "registry-register") return;
-                upsertRoomPeer(data.peerId || conn.peer, data.name || "Nearby Device");
-                roomPeers[data.peerId || conn.peer]._conn = conn;
+                const registryPeerId = data.peerId || conn.peer;
+                conn._registryPeerId = registryPeerId;
+                upsertRoomPeer(registryPeerId, data.name || "Nearby Device");
+                roomPeerConns[registryPeerId] = conn;
                 publishRoster();
             });
             conn.on("close", () => {
-                const pid = conn.peer;
+                const pid = conn._registryPeerId || conn.peer;
                 removeRoomPeer(pid);
                 publishRoster();
             });
