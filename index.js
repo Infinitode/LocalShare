@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedFiles = [];
     const incomingTransfers = {}; // { "peerId:fileName": { buffer: [], receivedBytes, totalSize, element } }
     let nearbyRoomId = "global"; // Default
+    let nearbyScanTimer = null;
 
     // --- Theme Removed (Dark Mode Only) ---
 
@@ -184,10 +185,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    connectButton.addEventListener("click", () => {
-        const remoteId = peerIdInput.value.trim();
+    function requestConnection(remoteId) {
         if (!remoteId || remoteId === peer.id) return;
-        
+
         displayPopup(`Requesting handshake with ${remoteId}...`);
         const conn = peer.connect(remoteId, {
             metadata: { name: localPeerName, type: 'handshake' }
@@ -204,6 +204,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         });
+    }
+
+    connectButton.addEventListener("click", () => {
+        requestConnection(peerIdInput.value.trim());
     });
 
     // --- UI Updates ---
@@ -232,24 +236,90 @@ document.addEventListener("DOMContentLoaded", () => {
         if (Object.keys(connections).length === 0) {
             peerList.innerHTML = `<li class="col-span-full border border-dashed border-white/10 rounded-2xl py-3 text-center text-text/40 text-xs italic">No active connections</li>`;
         }
+
+        if (peer) scanNearbyPeers();
     }
 
     window.disconnectPeer = (id) => {
         if (connections[id]) connections[id].conn.close();
     };
 
-    // --- Nearby Scan Simulation ---
-    // In a real app with a discovery server, we'd list them. 
-    // Here we simulate by looking for IDs with the same ROOM prefix.
-    function startNearbyScan() {
-        // Since PeerJS cloud doesn't support listAllPeers, we could use a custom signaling server.
-        // For this demo, we'll suggest using the QR code or ID, but "Nearby" feels automatic if we could.
+    function renderNearbyPeers(peerIds) {
+        if (!peerIds.length) {
+            nearbyList.innerHTML = `
+                <li class="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
+                    <span class="text-xs text-text/60">Network ID: <strong>#${nearbyRoomId}</strong></span>
+                    <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">Active</span>
+                </li>
+                <li class="text-xs text-text/40 italic py-4 text-center bg-white/5 rounded-xl border border-dashed border-white/10">
+                    No nearby devices found yet
+                </li>
+            `;
+            return;
+        }
+
         nearbyList.innerHTML = `
             <li class="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
                 <span class="text-xs text-text/60">Network ID: <strong>#${nearbyRoomId}</strong></span>
-                <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">Active</span>
+                <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">${peerIds.length} Found</span>
             </li>
         `;
+
+        peerIds.forEach((id) => {
+            const li = document.createElement("li");
+            const isConnected = Boolean(connections[id]);
+            li.className = "connection-card p-3 rounded-xl flex items-center justify-between gap-3";
+            li.innerHTML = `
+                <div class="min-w-0">
+                    <p class="peer-name text-xs font-bold truncate">${id}</p>
+                    <p class="peer-id text-[10px] text-text/40">Nearby device</p>
+                </div>
+                <button class="bg-primary hover:bg-primary/80 text-background px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap ${isConnected ? 'opacity-50 cursor-not-allowed' : ''}" ${isConnected ? 'disabled' : ''}>
+                    ${isConnected ? 'Connected' : 'Connect'}
+                </button>
+            `;
+            const button = li.querySelector("button");
+            if (!isConnected) {
+                button.addEventListener("click", () => requestConnection(id));
+            }
+            nearbyList.appendChild(li);
+        });
+    }
+
+    async function scanNearbyPeers() {
+        if (!peer || typeof peer.listAllPeers !== "function") {
+            renderNearbyPeers([]);
+            return;
+        }
+
+        try {
+            const allPeers = await new Promise((resolve, reject) => {
+                peer.listAllPeers((peers) => resolve(peers || []));
+                setTimeout(() => reject(new Error("scan-timeout")), 3000);
+            });
+            const prefix = `ls-${nearbyRoomId}-`;
+            const nearby = allPeers
+                .filter((id) => id.startsWith(prefix) && id !== peer.id)
+                .filter((id, idx, arr) => arr.indexOf(id) === idx);
+            renderNearbyPeers(nearby);
+        } catch (err) {
+            console.warn("Nearby scan failed:", err);
+            nearbyList.innerHTML = `
+                <li class="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
+                    <span class="text-xs text-text/60">Network ID: <strong>#${nearbyRoomId}</strong></span>
+                    <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">Active</span>
+                </li>
+                <li class="text-[11px] text-text/40 py-4 text-center bg-white/5 rounded-xl border border-dashed border-white/10">
+                    Nearby listing unavailable on this signaling server. Use Connect with Peer ID.
+                </li>
+            `;
+        }
+    }
+
+    function startNearbyScan() {
+        if (nearbyScanTimer) clearInterval(nearbyScanTimer);
+        scanNearbyPeers();
+        nearbyScanTimer = setInterval(scanNearbyPeers, 5000);
     }
 
     // --- File Handling ---
