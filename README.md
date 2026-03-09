@@ -4,7 +4,7 @@ LocalShare is a peer-to-peer file-sharing web app that was built entirely with v
 
 ## Latest Changes
 
-- Automatic discovery of nearby local devices.
+- Automatic discovery of nearby local devices (based on local IP addresses).
 - Better UI.
 - Subtle animations.
 

@@ -43,8 +43,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const connections = {}; // { peerId: { conn, name, status: 'pending'|'active' } }
     let selectedFiles = [];
     const incomingTransfers = {}; // { "peerId:fileName": { buffer: [], receivedBytes, totalSize, element } }
-    let nearbyRoomId = "global"; // Default
+    let nearbyRoomId = "local"; // Default
     let nearbyScanTimer = null;
+    const appConfig = window.LOCALSHARE_CONFIG || {};
+    const REGISTRY_HEARTBEAT_MS = 4000;
+    let roomHostPeer = null;
+    let isRoomHost = false;
+    let registryConn = null;
+    let registryReconnectTimer = null;
+    const roomPeers = {};
 
     // --- Theme Removed (Dark Mode Only) ---
 
@@ -72,28 +79,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Nearby Discovery Logic ---
-    // We use a shared prefix based on Public IP to simulate "Nearby"
-    async function initDiscovery() {
+    async function resolveNearbyRoomId() {
         try {
-            const res = await fetch('https://api.ipify.org?format=json');
+            const res = await fetch("https://api.ipify.org?format=json");
             const data = await res.json();
-            // Hash the IP to create a Room ID (using simple btoa for vanilla JS)
-            nearbyRoomId = btoa(data.ip).substring(0, 8);
-            console.log("Nearby Room ID:", nearbyRoomId);
-        } catch (e) {
-            console.warn("Could not get IP for discovery, using global room.");
+            const base = btoa(data.ip).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+            return `ip-${base.slice(0, 12)}`;
+        } catch (err) {
+            console.warn("ipify failed, falling back to local room", err);
+            const fallback = (window.location.host || "local").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+            return `local-${fallback.slice(0, 12) || "default"}`;
         }
+    }
+
+    async function initDiscovery() {
+        nearbyRoomId = await resolveNearbyRoomId();
+        console.log("Nearby Room ID:", nearbyRoomId);
         initPeer();
+    }
+
+    function getPeerOptions() {
+        const peerOptions = { debug: 2 };
+        if (appConfig.peer) Object.assign(peerOptions, appConfig.peer);
+        return peerOptions;
     }
 
     function initPeer() {
         // Create Peer with discovery-friendly ID pattern: localshare-ROOM-RANDOM
         const randomId = Math.random().toString(36).substring(2, 7);
         const peerId = `ls-${nearbyRoomId}-${randomId}`;
-        
-        peer = new Peer(peerId, {
-            debug: 2
-        });
+
+        peer = new Peer(peerId, getPeerOptions());
 
         peer.on("open", (id) => {
             console.log("Peer Open:", id);
@@ -110,6 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
             };
             displayQrCode(id);
             startNearbyScan();
+            bootstrapRoomRegistry();
         });
 
         peer.on("connection", (conn) => {
@@ -244,8 +261,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (connections[id]) connections[id].conn.close();
     };
 
-    function renderNearbyPeers(peerIds) {
-        if (!peerIds.length) {
+    function renderNearbyPeers(peers) {
+        if (!peers.length) {
             nearbyList.innerHTML = `
                 <li class="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
                     <span class="text-xs text-text/60">Network ID: <strong>#${nearbyRoomId}</strong></span>
@@ -261,18 +278,18 @@ document.addEventListener("DOMContentLoaded", () => {
         nearbyList.innerHTML = `
             <li class="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
                 <span class="text-xs text-text/60">Network ID: <strong>#${nearbyRoomId}</strong></span>
-                <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">${peerIds.length} Found</span>
+                <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">${peers.length} Found</span>
             </li>
         `;
 
-        peerIds.forEach((id) => {
+        peers.forEach(({ peerId, name }) => {
             const li = document.createElement("li");
-            const isConnected = Boolean(connections[id]);
+            const isConnected = Boolean(connections[peerId]);
             li.className = "connection-card p-3 rounded-xl flex items-center justify-between gap-3";
             li.innerHTML = `
                 <div class="min-w-0">
-                    <p class="peer-name text-xs font-bold truncate">${id}</p>
-                    <p class="peer-id text-[10px] text-text/40">Nearby device</p>
+                    <p class="peer-name text-xs font-bold truncate">${name}</p>
+                    <p class="peer-id text-[10px] text-text/40">${peerId}</p>
                 </div>
                 <button class="bg-primary hover:bg-primary/80 text-background px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap ${isConnected ? 'opacity-50 cursor-not-allowed' : ''}" ${isConnected ? 'disabled' : ''}>
                     ${isConnected ? 'Connected' : 'Connect'}
@@ -280,46 +297,156 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
             const button = li.querySelector("button");
             if (!isConnected) {
-                button.addEventListener("click", () => requestConnection(id));
+                button.addEventListener("click", () => requestConnection(peerId));
             }
             nearbyList.appendChild(li);
         });
     }
 
-    async function scanNearbyPeers() {
-        if (!peer || typeof peer.listAllPeers !== "function") {
+    function getRoomHostId() {
+        return `ls-roomhost-${nearbyRoomId}`;
+    }
+
+    function upsertRoomPeer(peerId, name) {
+        roomPeers[peerId] = { peerId, name: name || "Nearby Device", ts: Date.now() };
+    }
+
+    function removeRoomPeer(peerId) {
+        delete roomPeers[peerId];
+    }
+
+    function publishRoster() {
+        const now = Date.now();
+        Object.values(roomPeers).forEach((entry) => {
+            if (entry.peerId !== peer?.id && now - (entry.ts || 0) > REGISTRY_HEARTBEAT_MS * 4) {
+                removeRoomPeer(entry.peerId);
+            }
+        });
+        const roster = Object.values(roomPeers);
+        renderNearbyPeers(roster.filter((p) => p.peerId !== peer?.id));
+        if (!isRoomHost) return;
+        Object.values(roomPeers).forEach((entry) => {
+            const targetConn = entry._conn;
+            if (targetConn && targetConn.open) {
+                targetConn.send({ type: "registry-roster", peers: roster });
+            }
+        });
+    }
+
+    function startRegistryHeartbeat() {
+        if (nearbyScanTimer) clearInterval(nearbyScanTimer);
+        nearbyScanTimer = setInterval(() => {
+            if (isRoomHost) {
+                publishRoster();
+                return;
+            }
+            if (registryConn && registryConn.open) {
+                registryConn.send({ type: "registry-register", peerId: peer.id, name: localPeerName });
+            } else {
+                connectToRoomHost();
+            }
+        }, REGISTRY_HEARTBEAT_MS);
+    }
+
+    function setupRoomHostPeer() {
+        if (!roomHostPeer) return;
+        isRoomHost = true;
+        upsertRoomPeer(peer.id, localPeerName);
+
+        roomHostPeer.on("connection", (conn) => {
+            conn.on("data", (data) => {
+                if (data.type !== "registry-register") return;
+                upsertRoomPeer(data.peerId || conn.peer, data.name || "Nearby Device");
+                roomPeers[data.peerId || conn.peer]._conn = conn;
+                publishRoster();
+            });
+            conn.on("close", () => {
+                const pid = conn.peer;
+                removeRoomPeer(pid);
+                publishRoster();
+            });
+        });
+
+        publishRoster();
+    }
+
+    function becomeRoomHost() {
+        if (roomHostPeer) return;
+        roomHostPeer = new Peer(getRoomHostId(), getPeerOptions());
+        roomHostPeer.on("open", () => {
+            displayPopup("You are hosting local discovery");
+            setupRoomHostPeer();
+        });
+        roomHostPeer.on("error", (err) => {
+            if (err.type === "unavailable-id") {
+                isRoomHost = false;
+                connectToRoomHost();
+            }
+        });
+    }
+
+    function connectToRoomHost() {
+        if (!peer || !peer.id) return;
+        if (registryConn && registryConn.open) return;
+
+        const hostId = getRoomHostId();
+        const conn = peer.connect(hostId, { reliable: true });
+        registryConn = conn;
+
+        conn.on("open", () => {
+            conn.send({ type: "registry-register", peerId: peer.id, name: localPeerName });
+        });
+        conn.on("data", (data) => {
+            if (data.type === "registry-roster") {
+                const peers = (data.peers || []).filter((p) => p.peerId !== peer.id);
+                peers.forEach((p) => upsertRoomPeer(p.peerId, p.name));
+                renderNearbyPeers(peers);
+            }
+        });
+        conn.on("error", () => {
+            if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
+            registryReconnectTimer = setTimeout(() => {
+                becomeRoomHost();
+            }, 1500);
+        });
+        conn.on("close", () => {
+            if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
+            registryReconnectTimer = setTimeout(() => {
+                becomeRoomHost();
+            }, 1500);
+        });
+    }
+
+    function bootstrapRoomRegistry() {
+        becomeRoomHost();
+        setTimeout(() => {
+            if (!isRoomHost) connectToRoomHost();
+        }, 1200);
+    }
+
+    function scanNearbyPeers() {
+        if (!peer || !peer.id) {
             renderNearbyPeers([]);
             return;
         }
-
-        try {
-            const allPeers = await new Promise((resolve, reject) => {
-                peer.listAllPeers((peers) => resolve(peers || []));
-                setTimeout(() => reject(new Error("scan-timeout")), 3000);
-            });
-            const prefix = `ls-${nearbyRoomId}-`;
-            const nearby = allPeers
-                .filter((id) => id.startsWith(prefix) && id !== peer.id)
-                .filter((id, idx, arr) => arr.indexOf(id) === idx);
-            renderNearbyPeers(nearby);
-        } catch (err) {
-            console.warn("Nearby scan failed:", err);
-            nearbyList.innerHTML = `
-                <li class="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
-                    <span class="text-xs text-text/60">Network ID: <strong>#${nearbyRoomId}</strong></span>
-                    <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">Active</span>
-                </li>
-                <li class="text-[11px] text-text/40 py-4 text-center bg-white/5 rounded-xl border border-dashed border-white/10">
-                    Nearby listing unavailable on this signaling server. Use Connect with Peer ID.
-                </li>
-            `;
+        if (isRoomHost || (registryConn && registryConn.open)) {
+            renderNearbyPeers(Object.values(roomPeers).filter((p) => p.peerId !== peer.id));
+            return;
         }
+        nearbyList.innerHTML = `
+            <li class="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between group">
+                <span class="text-xs text-text/60">Network ID: <strong>#${nearbyRoomId}</strong></span>
+                <span class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full">Starting...</span>
+            </li>
+            <li class="text-[11px] text-text/40 py-4 text-center bg-white/5 rounded-xl border border-dashed border-white/10">
+                Bootstrapping local room discovery...
+            </li>
+        `;
     }
 
     function startNearbyScan() {
-        if (nearbyScanTimer) clearInterval(nearbyScanTimer);
         scanNearbyPeers();
-        nearbyScanTimer = setInterval(scanNearbyPeers, 5000);
+        startRegistryHeartbeat();
     }
 
     // --- File Handling ---
