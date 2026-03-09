@@ -1,58 +1,155 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LocalShare | P2P File Sharing</title>
-    <link rel="stylesheet" href="index.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
+    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 
-<body>
-    <div id="popup"><i class="bi bi-info-circle-fill"></i> This is a popup...</div>
-    <nav>
-        <img src="/localshare-logo.png" alt="Logo">
-        <h1>LocalShare</h1>
-        <div class="s"></div>
-        <a href="https://github.com/infinitode">Made with ❤️ by Infinitode</a>
-        <button id="theme-toggle" title="Toggle theme">
-            <i class="bi bi-sun-fill"></i>
-        </button>
+<body class="pixel-tech bg-background text-text min-h-screen font-sans antialiased overflow-x-hidden">
+    <!-- Navbar -->
+    <nav class="site-nav sticky top-0 z-50 backdrop-blur-md bg-background/70 border-b border-white/5 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="p-2 px-0">
+                <img src="/localshare-logo.png" alt="Logo" class="w-6 h-6">
+            </div>
+            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-text">LocalShare</h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="https://github.com/infinitode" class="hidden md:block text-xs text-text/50 hover:text-primary transition-colors">Made with ❤️ by Infinitode</a>
+        </div>
     </nav>
-    <div class="connections">
-        <div>
-            <p>Scan the QR Code</p>
-            <div id="qr-code-container">
-                <canvas id="peer-id-qr-code"></canvas>
+
+    <main class="layout-grid max-w-6xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <!-- Left Column: Identity & Discovery -->
+        <div class="lg:col-span-4 space-y-8">
+            <!-- My Identity -->
+            <section class="panel bg-white/5 border border-white/5 rounded-3xl p-6 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
+                <div class="absolute -top-24 -right-24 w-48 h-48 bg-primary/5 rounded-full blur-[64px] group-hover:bg-primary/10 transition-all duration-700"></div>
+                <h2 class="text-sm font-semibold tracking-wider text-text/40 uppercase mb-4">My Device</h2>
+                <div id="status-container" class="space-y-4">
+                    <div id="status" class="flex flex-col gap-1">
+                        <span class="text-text/30 text-xs animate-pulse">Initializing...</span>
+                    </div>
+                </div>
+                <div id="qr-code-container" class="mt-6 flex flex-col items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
+                    <canvas id="peer-id-qr-code" class="bg-white/5 p-2 rounded-lg"></canvas>
+                    <p class="text-xs text-text/40 text-center">Scan to connect instantly</p>
+                </div>
+            </section>
+
+            <!-- Nearby Discovery -->
+            <section class="panel bg-white/5 border border-white/5 rounded-3xl p-6 backdrop-blur-xl shadow-2xl">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-sm font-semibold tracking-wider text-text/40 uppercase">Nearby Devices</h2>
+                    <span class="flex h-2 w-2 relative">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                    </span>
+                </div>
+                <ul id="nearby-list" class="space-y-3">
+                    <li class="text-xs text-text/30 italic py-4 text-center bg-white/5 rounded-xl border border-dashed border-white/10">
+                        Scanning for devices...
+                    </li>
+                </ul>
+            </section>
+        </div>
+
+        <!-- Right Column: Connections & Transfers -->
+        <div class="lg:col-span-8 space-y-8">
+            <!-- Active Connections & Manual Connect -->
+            <section class="panel bg-white/5 border border-white/5 rounded-3xl p-6 backdrop-blur-xl">
+                <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+                    <h2 class="text-sm font-semibold tracking-wider text-text/40 uppercase">Connections</h2>
+                    <div class="connect-controls flex gap-2 w-full md:w-auto">
+                        <input type="text" id="peer-id-input" placeholder="Enter Peer ID..." class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-primary/50 outline-none w-full md:w-48 transition-all text-text">
+                        <button id="connect-button" class="bg-primary hover:bg-primary/80 text-background px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap shadow-lg shadow-primary/10">
+                            <i class="bi bi-wifi"></i> Connect
+                        </button>
+                    </div>
+                </div>
+                <ul id="peer-list" class="peer-grid grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Connected peers -->
+                </ul>
+            </section>
+
+            <!-- File Sharing Section -->
+            <section id="send-section" class="panel bg-white/5 border border-white/5 rounded-3xl p-6 backdrop-blur-xl relative overflow-hidden">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-sm font-semibold tracking-wider text-text/40 uppercase">Send Files</h2>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <input type="file" id="file-input" multiple class="hidden">
+                        <label for="file-input" class="group cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-white/10 hover:border-primary/30 bg-white/5 hover:bg-white/10 p-8 rounded-3xl transition-all duration-300">
+                            <i class="bi bi-cloud-arrow-up text-4xl text-text/20 group-hover:text-primary group-hover:-translate-y-1 transition-all"></i>
+                            <span class="mt-4 text-sm font-medium text-text/40 group-hover:text-text">Drop files or click to browse</span>
+                        </label>
+                        <button id="send-button" class="w-full bg-primary hover:bg-primary/80 text-background p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                            <i class="bi bi-send-fill"></i> Send to All
+                        </button>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-text/30">Selected Files</span>
+                            <span id="selected-count" class="text-[10px] bg-white/10 px-2 py-0.5 rounded-full text-text/40">0</span>
+                        </div>
+                        <ul id="file-list" class="max-h-[220px] overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-white/10">
+                            <li class="text-[11px] text-text/20 text-center py-8 italic">No files selected yet</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Transfers Status -->
+            <section id="transfers-section" class="grid grid-cols-1 md:grid-cols-2 gap-8 hidden">
+                <!-- Outgoing -->
+                <div id="outgoing-card" class="panel bg-white/5 border border-white/5 rounded-3xl p-6 backdrop-blur-xl hidden">
+                    <h2 class="text-sm font-semibold tracking-wider text-text/40 uppercase mb-4">Outgoing</h2>
+                    <ul id="send-progress-list" class="space-y-4"></ul>
+                </div>
+                <!-- Incoming -->
+                <div id="received-card" class="panel bg-white/5 border border-white/5 rounded-3xl p-6 backdrop-blur-xl hidden">
+                    <h2 class="text-sm font-semibold tracking-wider text-text/40 uppercase mb-4">Received</h2>
+                    <ul id="received-files" class="space-y-4"></ul>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Handshake Modal -->
+    <div id="handshake-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-6 bg-background/90 backdrop-blur-sm animate-in fade-in duration-300">
+        <div class="panel bg-white/5 border border-white/10 rounded-3xl p-8 max-w-sm w-full shadow-2xl transform scale-95 transition-transform duration-300 animate-in zoom-in-95">
+            <div class="flex flex-col items-center text-center gap-6">
+                <div class="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-3xl text-primary shadow-inner">
+                    <i class="bi bi-person-check-fill"></i>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-lg font-bold text-text">Connection Request</h3>
+                    <p id="handshake-message" class="text-sm text-text/60 leading-relaxed"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-3 w-full mt-2">
+                    <button id="handshake-reject" class="bg-white/5 hover:bg-white/10 text-text/70 py-3 rounded-2xl font-semibold transition-all active:scale-95 border border-white/10">Decline</button>
+                    <button id="handshake-accept" class="bg-primary hover:bg-primary/80 text-background py-3 rounded-2xl font-bold transition-all active:scale-95 shadow-lg shadow-primary/10">Accept</button>
+                </div>
             </div>
         </div>
     </div>
-    <div class="auto-grid">
-        <div class="card">
-            <p id="status">Initializing...</p>
-            <ul id="peer-list">
-                <!-- Connected peers could be listed here -->
-            </ul>
-        </div>
-        <div class="card" id="connection-section">
-            <h2>Connections</h2>
-        </div>
-        <div class="card" id="send-section">
-            <input type="file" id="file-input" multiple>
-            <label for="file-input" class="file-label"><i class="bi bi-upload"></i>Choose Files</label>
-            <button id="send-button"><i class="bi bi-send"></i>Send Files</button>
-            <ul id="file-list">
-                <!-- Selected files will be listed here by JavaScript -->
-            </ul>
-        </div>
-        <div class="card">
-            <ul id="received-files">
-                <!-- Links to downloaded/received files will appear here -->
-                <!-- Example: <li><a href="#" download="filename.txt">filename.txt</a> (Received from PeerX)</li> -->
-            </ul>
-        </div>
+
+    <!-- Toast Popup -->
+    <div id="popup" class="panel fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] max-w-sm w-full bg-white/10 border border-white/10 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl flex items-center gap-4 transition-all duration-300 opacity-0 pointer-events-none -translate-y-4 [&.show]:opacity-100 [&.show]:pointer-events-auto [&.show]:translate-y-0">
+        <i class="bi bi-info-circle-fill text-primary text-xl"></i>
+        <span class="text-sm font-medium text-text/90" id="popup-text"></span>
     </div>
+
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="index.js"></script>
 </body>

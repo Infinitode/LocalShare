@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #030b0d;
+  --color-text: #e0f1f7;
+  --color-primary: #85c6e1;
+  --color-secondary: #8b2322;
+  --color-accent: #d5c552;
+  
+  /* Map these to standard tailwind variants for convenience if needed, 
+     but we'll use the custom ones directly in HTML */
+}
+
+@layer base {
+  * {
+    @apply border-white/5;
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.primary') transparent;
+  }
+  
+  body {
+    @apply bg-background text-text selection:bg-primary/30 selection:text-primary;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
+  }
+}
+
+/* Custom Popup Transitions */
+#popup {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.animate-pulse-slow {
+  animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}

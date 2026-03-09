@@ -3,8 +3,10 @@
 LocalShare is a peer-to-peer file-sharing web app that was built entirely with vanilla HTML, CSS, and JS.
 
 ## Latest Changes
-- Improved UI with dark mode and light mode.
-- Subtle UI animations.
+
+- Automatic discovery of nearby local devices.
+- Better UI.
+- Subtle animations.
 
 ## Getting Started
 
@@ -17,7 +19,7 @@ cd LocalShare
 
 Or view and use the live web demo, at https://local-share.netlify.app/.
 
-*Live demo:*
+_Live demo:_
 
 [![LocalShare](local-share.jpeg)](https://local-share.netlify.app/)
 
