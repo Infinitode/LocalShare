@@ -19,11 +19,7 @@ git clone https://github.com/Infinitode/LocalShare.git
 cd LocalShare
 ```
 
-Or view and use the live web demo, at https://local-share.netlify.app/.
-
-_Live demo:_
-
-[![LocalShare](local-share.jpeg)](https://local-share.netlify.app/)
+Or view and use the live web demo at https://local-share.netlify.app/.
 
 ## Features
 
