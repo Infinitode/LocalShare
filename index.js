@@ -474,6 +474,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // --- State Guards to Stop the Infinite Loops ---
+    let isTransitioningDiscovery = false;
+
     function startRegistryHeartbeat() {
         if (nearbyScanTimer) clearInterval(nearbyScanTimer);
         nearbyScanTimer = setInterval(() => {
@@ -481,10 +484,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 publishRoster();
                 return;
             }
+            
+            // If we are already connected, just send a heartbeat pulse
             if (registryConn && registryConn.open) {
                 registryConn.send({ type: "registry-register", peerId: peer.id, name: localPeerName });
             } else {
-                connectToRoomHost();
+                // If the connection dropped and we aren't currently trying to fix it, re-verify network state
+                if (!isTransitioningDiscovery) {
+                    connectToRoomHost();
+                }
             }
         }, REGISTRY_HEARTBEAT_MS);
     }
@@ -514,64 +522,73 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function becomeRoomHost() {
-        if (roomHostPeer) return;
+        if (roomHostPeer || isRoomHost) return;
         
+        isTransitioningDiscovery = true;
         updateDiscoveryStatus("Setting up local discovery host...");
         const hostId = getRoomHostId();
 
         try {
             roomHostPeer = new Peer(hostId, getPeerOptions());
         } catch (e) {
-            console.warn("Failed to create roomHostPeer:", e);
+            console.warn("Failed to create roomHostPeer synchronously:", e);
+            isTransitioningDiscovery = false;
             return;
         }
 
         roomHostPeer.on("open", () => {
             isRoomHost = true;
+            isTransitioningDiscovery = false;
             displayPopup("You are hosting local discovery");
             updateDiscoveryStatus("Hosting local discovery");
             setupRoomHostPeer();
         });
 
         roomHostPeer.on("error", (err) => {
-            console.warn("RoomHost Peer error:", err);
-            
-            // Clean up the broken instance
-            try { if (roomHostPeer) roomHostPeer.destroy(); } catch (_e) {}
+            // Clean up the broken instance immediately
+            try { roomHostPeer.destroy(); } catch (_e) {}
             roomHostPeer = null;
             isRoomHost = false;
 
-            // If someone else snatched the ID right as we tried to host, safely drop back to a client connection
             if (err && (err.type === "unavailable-id" || (err.message && /taken/i.test(err.message)))) {
-                console.debug("Host ID taken simultaneously, reverting to client connection.");
-                setTimeout(() => connectToRoomHost(), 300 + Math.random() * 400);
+                console.debug("Host ID taken simultaneously during binding. Reverting to client.");
+                // Give the signaling server a brief moment to clear the socket state, then connect safely
+                setTimeout(() => {
+                    isTransitioningDiscovery = false;
+                    connectToRoomHost();
+                }, 500);
+            } else {
+                isTransitioningDiscovery = false;
             }
         });
     }
 
     function connectToRoomHost() {
-        if (!peer || !peer.id) return;
-        if (registryConn && registryConn.open) return;
+        if (!peer || !peer.id || isRoomHost || roomHostPeer || isTransitioningDiscovery) return;
 
+        isTransitioningDiscovery = true;
         const hostId = getRoomHostId();
-        console.debug("connectToRoomHost: attempting to connect to", hostId);
+        console.debug("connectToRoomHost: Probing network for host:", hostId);
         updateDiscoveryStatus("Connecting to room host...");
         
+        // We use our regular client peer instance to connect. This prevents throwing global ID allocation errors.
         const conn = peer.connect(hostId, { reliable: true });
         registryConn = conn;
 
-        // If connection doesn't open within 1 second, assume no host exists and become the host
+        // If the connection doesn't open within 1.2 seconds, assume no host exists on the signaling server
         const openTimeout = setTimeout(() => {
             if (!conn.open) {
-                console.debug("connectToRoomHost: No host found (timeout), becoming host.");
+                console.debug("connectToRoomHost: No host responded in time. Pivot to hosting.");
                 try { conn.close(); } catch (_e) {}
                 registryConn = null;
+                isTransitioningDiscovery = false;
                 becomeRoomHost();
             }
-        }, 1000);
+        }, 1200);
 
         conn.on("open", () => {
             clearTimeout(openTimeout);
+            isTransitioningDiscovery = false;
             updateDiscoveryStatus("Connected to room host");
             conn.send({ type: "registry-register", peerId: peer.id, name: localPeerName });
         });
@@ -586,25 +603,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
         conn.on("error", (err) => {
             clearTimeout(openTimeout);
-            if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
-            console.debug("connectToRoomHost: Host not available, transitioning to host role.");
+            try { conn.close(); } catch (_e) {}
+            registryConn = null;
             
-            registryReconnectTimer = setTimeout(() => {
+            console.debug("connectToRoomHost: Core connection error received. Transitioning role.");
+            setTimeout(() => {
+                isTransitioningDiscovery = false;
                 becomeRoomHost();
-            }, 500 + Math.random() * 500); // Small jittered delay
+            }, 300 + Math.random() * 300); // Jittered delay to stop race condition spikes
         });
 
         conn.on("close", () => {
-            if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
-            console.debug("connectToRoomHost: Host disconnected, attempting to claim hosting role.");
-            registryReconnectTimer = setTimeout(() => {
+            if (registryConn) {
+                try { registryConn.close(); } catch (_e) {}
+                registryConn = null;
+            }
+            console.debug("connectToRoomHost: Connection closed by host.");
+            setTimeout(() => {
+                isTransitioningDiscovery = false;
                 becomeRoomHost();
-            }, 500 + Math.random() * 500);
+            }, 400);
         });
     }
 
     function bootstrapRoomRegistry() {
-        // First, check if a host already exists. If not, this will automatically fallback to becoming the host.
+        // Safe gateway entrypoint
         connectToRoomHost();
     }
 
