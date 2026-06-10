@@ -135,21 +135,37 @@ document.addEventListener("DOMContentLoaded", () => {
         return peerOptions;
     }
 
-    function initPeer() {
-        // Create Peer with discovery-friendly ID pattern: localshare-ROOM-RANDOM
-        const randomId = Math.random().toString(36).substring(2, 7);
-        const peerId = `ls-${nearbyRoomId}-${randomId}`;
+    function generatePeerId() {
+        try {
+            if (window.crypto && crypto.randomUUID) {
+                // use full uuid to minimize collision risk
+                return `ls-${nearbyRoomId}-${crypto.randomUUID()}`;
+            }
+        } catch (_e) {}
+        const rnd = Math.random().toString(36).substring(2, 16);
+        return `ls-${nearbyRoomId}-${rnd}-${Date.now().toString(36)}`;
+    }
 
-        peer = new Peer(peerId, getPeerOptions());
+    function initPeer() {
+        const attemptId = generatePeerId();
+        if (peer) {
+            try { peer.destroy(); } catch (_e) {}
+            peer = null;
+        }
+
+        peer = new Peer(attemptId, getPeerOptions());
 
         peer.on("open", (id) => {
-            console.log("Peer Open:", id);
+            console.log("Peer Open:", id, "(attemptId)");
             statusEl.innerHTML = `
-                <span class="text-primary font-bold text-lg">${localPeerName}</span>
-                <div class="flex items-center gap-2 mt-1">
-                    <code class="text-xs text-text/30 bg-white/5 px-2 py-1 rounded-md border border-white/5">${id}</code>
-                    <button id="copy-id" class="text-text/40 hover:text-primary transition-colors"><i class="bi bi-copy"></i></button>
+                <div>
+                    <span class="text-primary font-bold text-lg">${localPeerName}</span>
+                    <div class="flex items-center gap-2 mt-1">
+                        <code class="text-xs text-text/30 bg-white/5 px-2 py-1 rounded-md border border-white/5">${id}</code>
+                        <button id="copy-id" class="text-text/40 hover:text-primary transition-colors"><i class="bi bi-copy"></i></button>
+                    </div>
                 </div>
+                <div id="discovery-status" class="text-[11px] text-text/40 mt-2">Discovering nearby devices...</div>
             `;
             document.getElementById("copy-id").onclick = () => {
                 navigator.clipboard.writeText(id);
@@ -167,16 +183,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
         peer.on("error", (err) => {
             console.error("PeerJS Error:", err);
-            displayPopup(`Error: ${err.type}`);
+            if (err && err.type === "unavailable-id") {
+                displayPopup("Peer ID already in use — regenerating a new ID...");
+                setTimeout(() => {
+                    initPeer();
+                }, 300 + Math.random() * 300);
+                return;
+            }
+            displayPopup(`Error: ${err && err.type ? err.type : err}`);
         });
     }
 
     function displayQrCode(id) {
-        QRCode.toCanvas(qrCodeCanvas, id, {
-            width: 140,
-            margin: 0,
-            color: { dark: "#85c6e100", light: "#85c6e1" }
-        });
+        // Render QR with vivid cyan on pure black for high-contrast AMOLED displays
+        try {
+            QRCode.toCanvas(qrCodeCanvas, id, {
+                width: 140,
+                margin: 0,
+                color: { dark: "#00E5FF", light: "#000000" }
+            });
+            // add a subtle outline so it reads on pure-black backgrounds
+            qrCodeCanvas.style.border = '1px solid rgba(0,229,255,0.12)';
+            qrCodeCanvas.style.padding = '12px';
+            qrCodeCanvas.style.margin = '6px';
+            qrCodeCanvas.style.background = '#000000';
+            qrCodeCanvas.style.borderRadius = '8px';
+        } catch (e) {
+            console.warn('QR render failed', e);
+        }
+    }
+
+    function updateDiscoveryStatus(text) {
+        const el = document.getElementById("discovery-status");
+        if (el) el.textContent = text || "";
     }
 
     // --- Connection & Handshake ---
@@ -258,7 +297,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function requestConnection(remoteId) {
-        if (!remoteId || remoteId === peer.id) return;
+        if (!remoteId) return;
+        if (peer && remoteId === peer.id) {
+            // Detected a duplicate/same peer id on the network — regenerate and retry discovery
+            displayPopup("Detected duplicate Peer ID on network — regenerating...");
+            setTimeout(() => {
+                initPeer();
+            }, 200 + Math.random() * 300);
+            return;
+        }
 
         displayPopup(`Requesting handshake with ${remoteId}...`);
         const conn = peer.connect(remoteId, {
@@ -468,17 +515,111 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function becomeRoomHost() {
         if (roomHostPeer) return;
-        roomHostPeer = new Peer(getRoomHostId(), getPeerOptions());
-        roomHostPeer.on("open", () => {
-            displayPopup("You are hosting local discovery");
-            setupRoomHostPeer();
-        });
-        roomHostPeer.on("error", (err) => {
-            if (err.type === "unavailable-id") {
-                isRoomHost = false;
-                connectToRoomHost();
+        updateDiscoveryStatus("Attempting to become room host...");
+        const hostId = getRoomHostId();
+        let attempts = 0;
+
+        const scheduleRetry = (min = 300, max = 1200) => {
+            const delay = min + Math.random() * (max - min);
+            console.debug("becomeRoomHost: scheduling retry in", Math.round(delay));
+            setTimeout(() => tryCreateHost(), delay);
+        };
+
+        const cleanupRoomHost = () => {
+            try { if (roomHostPeer) roomHostPeer.destroy(); } catch (_e) {}
+            roomHostPeer = null;
+            isRoomHost = false;
+        };
+        const checkHostExists = (timeout = 700) => {
+            return new Promise((resolve) => {
+                if (!peer || !peer.id) return resolve(false);
+                let done = false;
+                const probe = peer.connect(hostId, { reliable: true });
+                const timer = setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    try { probe.close(); } catch (_e) {}
+                    resolve(false);
+                }, timeout);
+
+                probe.on("open", () => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    try { probe.close(); } catch (_e) {}
+                    resolve(true);
+                });
+
+                probe.on("error", () => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    try { probe.close(); } catch (_e) {}
+                    resolve(false);
+                });
+            });
+        };
+
+        const hashString = (s) => {
+            let h = 2166136261 >>> 0;
+            for (let i = 0; i < s.length; i++) {
+                h ^= s.charCodeAt(i);
+                h = Math.imul(h, 16777619) >>> 0;
             }
-        });
+            return h >>> 0;
+        };
+
+        const tryCreateHost = async () => {
+            if (roomHostPeer) return;
+            attempts++;
+            // Deterministic + randomized backoff to spread simultaneous hosts on same LAN
+            const seed = peer && peer.id ? hashString(peer.id) : Math.floor(Math.random() * 1000000);
+            const deterministicPart = seed % 900; // 0..899ms
+            const backoff = 150 + deterministicPart + Math.random() * 700 + attempts * 60;
+            console.debug("tryCreateHost: backing off for", Math.round(backoff));
+            updateDiscoveryStatus("Probing for existing host...");
+            // During backoff, probe for an existing host; if one appears, abort host creation.
+            const probePromise = checkHostExists(Math.min(1000, 400 + attempts * 250));
+            await new Promise((r) => setTimeout(r, backoff));
+            const hostFound = await probePromise.catch(() => false);
+            if (hostFound) {
+                console.debug("tryCreateHost: detected existing host during backoff, will connect instead");
+                updateDiscoveryStatus("Host found — connecting...");
+                connectToRoomHost();
+                return;
+            }
+            try {
+                roomHostPeer = new Peer(hostId, getPeerOptions());
+            } catch (e) {
+                console.warn("Failed to create roomHostPeer synchronously:", e);
+                cleanupRoomHost();
+                scheduleRetry();
+                return;
+            }
+
+            roomHostPeer.on("open", () => {
+                isRoomHost = true;
+                displayPopup("You are hosting local discovery");
+                updateDiscoveryStatus("Hosting local discovery");
+                setupRoomHostPeer();
+            });
+            roomHostPeer.on("error", (err) => {
+                console.warn("RoomHost Peer error:", err);
+                cleanupRoomHost();
+                updateDiscoveryStatus("Host error — will retry");
+                // If ID is already taken, another device became host. Try connecting instead.
+                if (err && (err.type === "unavailable-id" || (err.message && /taken/i.test(err.message)))) {
+                    const delay = 150 + Math.random() * 800 + attempts * 30;
+                    console.debug("Room host id taken - will attempt to connect to host in", Math.round(delay));
+                    setTimeout(() => connectToRoomHost(), delay);
+                    return;
+                }
+                // For other errors, retry with backoff up to a reasonable number of attempts
+                if (attempts < 6) scheduleRetry(300, 1200 + attempts * 200);
+            });
+        };
+
+        tryCreateHost();
     }
 
     function connectToRoomHost() {
@@ -486,10 +627,24 @@ document.addEventListener("DOMContentLoaded", () => {
         if (registryConn && registryConn.open) return;
 
         const hostId = getRoomHostId();
+        console.debug("connectToRoomHost: attempting to connect to", hostId);
+        updateDiscoveryStatus("Connecting to room host...");
         const conn = peer.connect(hostId, { reliable: true });
         registryConn = conn;
 
+        // If connection doesn't open within a short window, treat as failure and try becoming host
+        const openTimeout = setTimeout(() => {
+            if (!conn.open) {
+                console.debug("connectToRoomHost: connection to host did not open in time, cleaning and trying to become host");
+                try { conn.close(); } catch (_e) {}
+                registryConn = null;
+                becomeRoomHost();
+            }
+        }, 900);
+
         conn.on("open", () => {
+            clearTimeout(openTimeout);
+            updateDiscoveryStatus("Connected to room host");
             conn.send({ type: "registry-register", peerId: peer.id, name: localPeerName });
         });
         conn.on("data", (data) => {
@@ -501,15 +656,19 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         conn.on("error", () => {
             if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
+            console.debug("connectToRoomHost: registry conn error, will attempt to become host shortly");
+            updateDiscoveryStatus("Failed to connect to host — retrying...");
             registryReconnectTimer = setTimeout(() => {
                 becomeRoomHost();
-            }, 1500);
+            }, 700 + Math.random() * 800);
         });
         conn.on("close", () => {
             if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
+            console.debug("connectToRoomHost: registry conn closed, scheduling becomeRoomHost");
+            updateDiscoveryStatus("Disconnected from host — retrying...");
             registryReconnectTimer = setTimeout(() => {
                 becomeRoomHost();
-            }, 1500);
+            }, 700 + Math.random() * 800);
         });
     }
 

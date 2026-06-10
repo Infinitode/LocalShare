@@ -4,6 +4,8 @@ LocalShare is a peer-to-peer file-sharing web app that was built entirely with v
 
 ## Latest Changes
 
+- Updated the UI.
+ - Fixed automatic discovery duplicate Peer ID collisions on the same LAN: peer IDs now use `crypto.randomUUID()` when available, the client regenerates IDs when the PeerJS server reports an `unavailable-id`, and room-host creation uses a probe + deterministic staggered backoff to avoid simultaneous host creation.
 - Automatic nearby discovery using IPify-based room grouping and in-browser room host registry.
 - Connection acceptance now reflects on both devices reliably.
 - Richer transfer details (percent + bytes).

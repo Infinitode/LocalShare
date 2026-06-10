@@ -1,11 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #030b0d;
-  --color-text: #e0f1f7;
-  --color-primary: #85c6e1;
-  --color-secondary: #8b2322;
-  --color-accent: #d5c552;
+  --color-background: #000000; /* pitch black */
+  --color-text: #F5F5F7; /* high-contrast near-white */
+  --color-primary: #00E5FF; /* electric cyan accent */
+  --color-secondary: #FFD43B; /* warm gold accent */
+  --color-accent: #00FFA3; /* mint accent for highlights */
+  --color-surface: #050505; /* slightly lifted panel surface */
+  --color-panel-border: rgba(255,255,255,0.06);
+  --color-muted: rgba(245,245,247,0.18);
   
   /* Map these to standard tailwind variants for convenience if needed, 
      but we'll use the custom ones directly in HTML */
@@ -13,32 +16,90 @@
 
 @layer base {
   * {
-    @apply border-white/5;
+    @apply border-white/10;
     scrollbar-width: thin;
-    scrollbar-color: theme('colors.primary') transparent;
+    scrollbar-color: var(--color-primary) transparent;
   }
   
   body {
-    @apply bg-background text-text selection:bg-primary/30 selection:text-primary;
+    background-color: var(--color-background);
+    color: var(--color-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: rgba(0, 229, 255, 0.18);
+    color: var(--color-text);
   }
 }
 
-@layer utilities {
-  .glass {
-    @apply backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl;
+@layer components {
+  /* Utility-first component classes using Tailwind @apply */
+  .glass { @apply backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl; }
+
+  /* Panels use pure black for AMOLED */
+  .panel { @apply bg-black border border-white/12 text-white rounded-xl p-8 shadow-lg; }
+
+  /* Layout spacing (nav is now relative) */
+  .layout-grid { @apply pt-8; }
+
+  /* Blocky, outlined connection/cards with strong borders */
+  .connection-card { @apply p-4 bg-black border border-white/12 rounded-lg flex items-center justify-between gap-3 transition-all; }
+  .connection-card .peer-icon { @apply w-12 h-12 rounded-lg bg-white/8 flex items-center justify-center text-cyan-300 border border-white/12; }
+  .connection-card:hover { @apply border-cyan-400/20 bg-white/5; }
+
+  /* QR card: blocky editorial style with visible structure */
+  #qr-code-container { @apply p-6 bg-black border border-white/12 rounded-lg flex flex-col items-center gap-4; }
+  #peer-id-qr-code { @apply bg-black rounded-lg border border-white/12; }
+
+  /* Section headings: uppercase, tighter tracking, stronger presence */
+  .panel > h2 { @apply mb-6 text-xs tracking-widest text-gray-400 font-semibold; }
+  .panel .identity-wrap p.peer-name { @apply text-sm font-semibold text-white; }
+  .panel .identity-wrap p.peer-id { @apply text-xs text-gray-500; }
+
+  /* Outlined buttons: blocky and tactile */
+  .outlined-btn { @apply bg-transparent text-cyan-300 border border-cyan-400/20 px-5 py-3 rounded-lg font-medium transition-all; }
+  .outlined-btn:hover { @apply bg-cyan-400/8 border-cyan-400/30; }
+
+  /* List spacing */
+  #peer-list, #nearby-list { @apply space-y-3; }
+
+  .saaS-heading { @apply font-semibold tracking-tight leading-tight m-0 text-white; }
+  h1 { font-family: 'Space Grotesk', 'Playfair Display', system-ui, sans-serif; @apply text-4xl tracking-tight font-semibold; }
+  h2 { font-family: 'Space Grotesk', 'Playfair Display', system-ui, sans-serif; @apply text-sm text-cyan-300 tracking-wider; }
+  h3 { @apply text-base font-medium; }
+
+  /* Buttons: default to outlined / no fill for a clean, editorial look */
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl font-bold px-5 py-3 transition-transform duration-150 bg-transparent border border-white/12 text-cyan-300; }
+  .btn:focus { @apply ring-2 ring-cyan-400/25; }
+  .btn-primary { @apply bg-transparent; }
+  .btn-primary:hover { @apply -translate-y-0.5; }
+
+  .muted { @apply text-gray-400; }
+
+  .site-nav { @apply bg-black/60 backdrop-blur-md; }
+  .site-nav .logo { @apply w-9 h-9 object-contain mr-3; }
+  .app-title { @apply text-white px-2 py-0.5 rounded-md bg-transparent text-lg font-medium; }
+
+  .outlined-btn { @apply bg-transparent text-cyan-300 border border-cyan-400/20 px-4 py-2 rounded-lg; }
+  .outlined-btn:hover { @apply bg-cyan-400/6 -translate-y-0.5; }
+
+  /* Send and chat send buttons: ensure no yellow fill, enforce outlined look */
+  #send-button, #chat-send {
+    background-color: transparent !important;
+    color: var(--color-text) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    box-shadow: none !important;
   }
-  
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
-  }
+  #send-button:hover, #chat-send:hover { @apply bg-white/5; transform: translateY(-2px); }
+  #send-button:active, #chat-send:active { transform: translateY(0); }
+
+  /* Scrollbar helpers remain as small custom parts */
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { @apply bg-transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { @apply rounded-full; background-color: rgba(0,229,255,0.14); transition: background-color .18s ease; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: rgba(0,229,255,0.28); }
 }
 
 /* Custom Popup Transitions */
