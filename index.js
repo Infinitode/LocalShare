@@ -515,111 +515,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function becomeRoomHost() {
         if (roomHostPeer) return;
-        updateDiscoveryStatus("Attempting to become room host...");
+        
+        updateDiscoveryStatus("Setting up local discovery host...");
         const hostId = getRoomHostId();
-        let attempts = 0;
 
-        const scheduleRetry = (min = 300, max = 1200) => {
-            const delay = min + Math.random() * (max - min);
-            console.debug("becomeRoomHost: scheduling retry in", Math.round(delay));
-            setTimeout(() => tryCreateHost(), delay);
-        };
+        try {
+            roomHostPeer = new Peer(hostId, getPeerOptions());
+        } catch (e) {
+            console.warn("Failed to create roomHostPeer:", e);
+            return;
+        }
 
-        const cleanupRoomHost = () => {
+        roomHostPeer.on("open", () => {
+            isRoomHost = true;
+            displayPopup("You are hosting local discovery");
+            updateDiscoveryStatus("Hosting local discovery");
+            setupRoomHostPeer();
+        });
+
+        roomHostPeer.on("error", (err) => {
+            console.warn("RoomHost Peer error:", err);
+            
+            // Clean up the broken instance
             try { if (roomHostPeer) roomHostPeer.destroy(); } catch (_e) {}
             roomHostPeer = null;
             isRoomHost = false;
-        };
-        const checkHostExists = (timeout = 700) => {
-            return new Promise((resolve) => {
-                if (!peer || !peer.id) return resolve(false);
-                let done = false;
-                const probe = peer.connect(hostId, { reliable: true });
-                const timer = setTimeout(() => {
-                    if (done) return;
-                    done = true;
-                    try { probe.close(); } catch (_e) {}
-                    resolve(false);
-                }, timeout);
 
-                probe.on("open", () => {
-                    if (done) return;
-                    done = true;
-                    clearTimeout(timer);
-                    try { probe.close(); } catch (_e) {}
-                    resolve(true);
-                });
-
-                probe.on("error", () => {
-                    if (done) return;
-                    done = true;
-                    clearTimeout(timer);
-                    try { probe.close(); } catch (_e) {}
-                    resolve(false);
-                });
-            });
-        };
-
-        const hashString = (s) => {
-            let h = 2166136261 >>> 0;
-            for (let i = 0; i < s.length; i++) {
-                h ^= s.charCodeAt(i);
-                h = Math.imul(h, 16777619) >>> 0;
+            // If someone else snatched the ID right as we tried to host, safely drop back to a client connection
+            if (err && (err.type === "unavailable-id" || (err.message && /taken/i.test(err.message)))) {
+                console.debug("Host ID taken simultaneously, reverting to client connection.");
+                setTimeout(() => connectToRoomHost(), 300 + Math.random() * 400);
             }
-            return h >>> 0;
-        };
-
-        const tryCreateHost = async () => {
-            if (roomHostPeer) return;
-            attempts++;
-            // Deterministic + randomized backoff to spread simultaneous hosts on same LAN
-            const seed = peer && peer.id ? hashString(peer.id) : Math.floor(Math.random() * 1000000);
-            const deterministicPart = seed % 900; // 0..899ms
-            const backoff = 150 + deterministicPart + Math.random() * 700 + attempts * 60;
-            console.debug("tryCreateHost: backing off for", Math.round(backoff));
-            updateDiscoveryStatus("Probing for existing host...");
-            // During backoff, probe for an existing host; if one appears, abort host creation.
-            const probePromise = checkHostExists(Math.min(1000, 400 + attempts * 250));
-            await new Promise((r) => setTimeout(r, backoff));
-            const hostFound = await probePromise.catch(() => false);
-            if (hostFound) {
-                console.debug("tryCreateHost: detected existing host during backoff, will connect instead");
-                updateDiscoveryStatus("Host found — connecting...");
-                connectToRoomHost();
-                return;
-            }
-            try {
-                roomHostPeer = new Peer(hostId, getPeerOptions());
-            } catch (e) {
-                console.warn("Failed to create roomHostPeer synchronously:", e);
-                cleanupRoomHost();
-                scheduleRetry();
-                return;
-            }
-
-            roomHostPeer.on("open", () => {
-                isRoomHost = true;
-                displayPopup("You are hosting local discovery");
-                updateDiscoveryStatus("Hosting local discovery");
-                setupRoomHostPeer();
-            });
-            roomHostPeer.on("error", (err) => {
-                console.warn("RoomHost Peer error:", err);
-                cleanupRoomHost();
-                updateDiscoveryStatus("Host error — will retry");
-                // If ID is already taken, another device became host. Try connecting instead.
-                if (err && (err.type === "unavailable-id" || (err.message && /taken/i.test(err.message)))) {
-                    const delay = 150 + Math.random() * 800 + attempts * 30;
-                    console.debug("Room host id taken - will attempt to connect to host in", Math.round(delay));
-                    setTimeout(() => connectToRoomHost(), delay);
-                    return;
-                }
-                // For other errors, retry with backoff up to a reasonable number of attempts
-                if (attempts < 6) scheduleRetry(300, 1200 + attempts * 200);
-            });
-        };
-
-        tryCreateHost();
+        });
     }
 
     function connectToRoomHost() {
@@ -629,24 +556,26 @@ document.addEventListener("DOMContentLoaded", () => {
         const hostId = getRoomHostId();
         console.debug("connectToRoomHost: attempting to connect to", hostId);
         updateDiscoveryStatus("Connecting to room host...");
+        
         const conn = peer.connect(hostId, { reliable: true });
         registryConn = conn;
 
-        // If connection doesn't open within a short window, treat as failure and try becoming host
+        // If connection doesn't open within 1 second, assume no host exists and become the host
         const openTimeout = setTimeout(() => {
             if (!conn.open) {
-                console.debug("connectToRoomHost: connection to host did not open in time, cleaning and trying to become host");
+                console.debug("connectToRoomHost: No host found (timeout), becoming host.");
                 try { conn.close(); } catch (_e) {}
                 registryConn = null;
                 becomeRoomHost();
             }
-        }, 900);
+        }, 1000);
 
         conn.on("open", () => {
             clearTimeout(openTimeout);
             updateDiscoveryStatus("Connected to room host");
             conn.send({ type: "registry-register", peerId: peer.id, name: localPeerName });
         });
+
         conn.on("data", (data) => {
             if (data.type === "registry-roster") {
                 const peers = (data.peers || []).filter((p) => p.peerId !== peer.id);
@@ -654,29 +583,29 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderNearbyPeers(peers);
             }
         });
-        conn.on("error", () => {
+
+        conn.on("error", (err) => {
+            clearTimeout(openTimeout);
             if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
-            console.debug("connectToRoomHost: registry conn error, will attempt to become host shortly");
-            updateDiscoveryStatus("Failed to connect to host — retrying...");
+            console.debug("connectToRoomHost: Host not available, transitioning to host role.");
+            
             registryReconnectTimer = setTimeout(() => {
                 becomeRoomHost();
-            }, 700 + Math.random() * 800);
+            }, 500 + Math.random() * 500); // Small jittered delay
         });
+
         conn.on("close", () => {
             if (registryReconnectTimer) clearTimeout(registryReconnectTimer);
-            console.debug("connectToRoomHost: registry conn closed, scheduling becomeRoomHost");
-            updateDiscoveryStatus("Disconnected from host — retrying...");
+            console.debug("connectToRoomHost: Host disconnected, attempting to claim hosting role.");
             registryReconnectTimer = setTimeout(() => {
                 becomeRoomHost();
-            }, 700 + Math.random() * 800);
+            }, 500 + Math.random() * 500);
         });
     }
 
     function bootstrapRoomRegistry() {
-        becomeRoomHost();
-        setTimeout(() => {
-            if (!isRoomHost) connectToRoomHost();
-        }, 1200);
+        // First, check if a host already exists. If not, this will automatically fallback to becoming the host.
+        connectToRoomHost();
     }
 
     function scanNearbyPeers() {
