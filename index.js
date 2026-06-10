@@ -51,12 +51,13 @@ document.addEventListener("DOMContentLoaded", () => {
     let nearbyScanTimer = null;
     const appConfig = window.LOCALSHARE_CONFIG || {};
     const REGISTRY_HEARTBEAT_MS = 4000;
+    
     let roomHostPeer = null;
     let isRoomHost = false;
     let registryConn = null;
-    let registryReconnectTimer = null;
     const roomPeers = {};
     const roomPeerConns = {};
+    let isTransitioningDiscovery = false;
 
     // --- Theme Removed (Dark Mode Only) ---
 
@@ -138,7 +139,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function generatePeerId() {
         try {
             if (window.crypto && crypto.randomUUID) {
-                // use full uuid to minimize collision risk
                 return `ls-${nearbyRoomId}-${crypto.randomUUID()}`;
             }
         } catch (_e) {}
@@ -182,6 +182,11 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         peer.on("error", (err) => {
+            // Quietly suppress roomhost-taken warnings since they drive the normal client failover
+            if (err && err.message && err.message.includes("ls-roomhost-") && err.message.includes("taken")) {
+                return; 
+            }
+
             console.error("PeerJS Error:", err);
             if (err && err.type === "unavailable-id") {
                 displayPopup("Peer ID already in use — regenerating a new ID...");
@@ -195,14 +200,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function displayQrCode(id) {
-        // Render QR with vivid cyan on pure black for high-contrast AMOLED displays
         try {
             QRCode.toCanvas(qrCodeCanvas, id, {
                 width: 140,
                 margin: 0,
                 color: { dark: "#00E5FF", light: "#000000" }
             });
-            // add a subtle outline so it reads on pure-black backgrounds
             qrCodeCanvas.style.border = '1px solid rgba(0,229,255,0.12)';
             qrCodeCanvas.style.padding = '12px';
             qrCodeCanvas.style.margin = '6px';
@@ -222,7 +225,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function handleIncomingConnection(conn) {
         const remoteName = conn.metadata?.name || "Unknown Device";
         
-        // Handshake Logic
         handshakeMessage.innerHTML = `<strong>${remoteName}</strong> from your network wants to connect. Do you accept?`;
         handshakeModal.classList.remove("hidden");
         
@@ -299,7 +301,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function requestConnection(remoteId) {
         if (!remoteId) return;
         if (peer && remoteId === peer.id) {
-            // Detected a duplicate/same peer id on the network — regenerate and retry discovery
             displayPopup("Detected duplicate Peer ID on network — regenerating...");
             setTimeout(() => {
                 initPeer();
@@ -474,9 +475,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // --- State Guards to Stop the Infinite Loops ---
-    let isTransitioningDiscovery = false;
-
     function startRegistryHeartbeat() {
         if (nearbyScanTimer) clearInterval(nearbyScanTimer);
         nearbyScanTimer = setInterval(() => {
@@ -485,11 +483,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             
-            // If we are already connected, just send a heartbeat pulse
             if (registryConn && registryConn.open) {
                 registryConn.send({ type: "registry-register", peerId: peer.id, name: localPeerName });
             } else {
-                // If the connection dropped and we aren't currently trying to fix it, re-verify network state
                 if (!isTransitioningDiscovery) {
                     connectToRoomHost();
                 }
@@ -545,14 +541,12 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         roomHostPeer.on("error", (err) => {
-            // Clean up the broken instance immediately
             try { roomHostPeer.destroy(); } catch (_e) {}
             roomHostPeer = null;
             isRoomHost = false;
 
             if (err && (err.type === "unavailable-id" || (err.message && /taken/i.test(err.message)))) {
                 console.debug("Host ID taken simultaneously during binding. Reverting to client.");
-                // Give the signaling server a brief moment to clear the socket state, then connect safely
                 setTimeout(() => {
                     isTransitioningDiscovery = false;
                     connectToRoomHost();
@@ -571,11 +565,9 @@ document.addEventListener("DOMContentLoaded", () => {
         console.debug("connectToRoomHost: Probing network for host:", hostId);
         updateDiscoveryStatus("Connecting to room host...");
         
-        // We use our regular client peer instance to connect. This prevents throwing global ID allocation errors.
         const conn = peer.connect(hostId, { reliable: true });
         registryConn = conn;
 
-        // If the connection doesn't open within 1.2 seconds, assume no host exists on the signaling server
         const openTimeout = setTimeout(() => {
             if (!conn.open) {
                 console.debug("connectToRoomHost: No host responded in time. Pivot to hosting.");
@@ -596,6 +588,8 @@ document.addEventListener("DOMContentLoaded", () => {
         conn.on("data", (data) => {
             if (data.type === "registry-roster") {
                 const peers = (data.peers || []).filter((p) => p.peerId !== peer.id);
+                // Clear old stale references before copying source-of-truth roster
+                Object.keys(roomPeers).forEach(k => delete roomPeers[k]);
                 peers.forEach((p) => upsertRoomPeer(p.peerId, p.name));
                 renderNearbyPeers(peers);
             }
@@ -610,7 +604,7 @@ document.addEventListener("DOMContentLoaded", () => {
             setTimeout(() => {
                 isTransitioningDiscovery = false;
                 becomeRoomHost();
-            }, 300 + Math.random() * 300); // Jittered delay to stop race condition spikes
+            }, 300 + Math.random() * 300);
         });
 
         conn.on("close", () => {
@@ -627,7 +621,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function bootstrapRoomRegistry() {
-        // Safe gateway entrypoint
         connectToRoomHost();
     }
 
@@ -715,7 +708,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const safeName = file.name.replace(/\s+/g, '-');
         const transferId = `send-${conn.peer}-${safeName}`;
         
-        // UI Entry
         const li = document.createElement("li");
         li.id = transferId;
         li.className = "transfer-card space-y-2 p-3 rounded-xl animate-in slide-in-from-right duration-300";
@@ -732,10 +724,8 @@ document.addEventListener("DOMContentLoaded", () => {
         sendProgressList.appendChild(li);
         updateTransferVisibility();
 
-        // Metadata
         conn.send({ type: 'file-metadata', fileName: file.name, totalSize: file.size });
 
-        // Chunking
         const chunkSize = 16384 * 4; // 64KB
         let offset = 0;
         const reader = new FileReader();
@@ -760,7 +750,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 const meta = document.getElementById(`${transferId}-meta`);
                 if (meta) meta.textContent = `${Math.round(pct)}% • ${formatBytes(offset)} / ${formatBytes(file.size)}`;
                 
-                // Controlled recursion to avoid blocking
                 setTimeout(sendChunk, 10);
             };
             reader.readAsArrayBuffer(slice);
